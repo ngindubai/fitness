@@ -362,10 +362,11 @@ function renderPreview(items) {
     row.className = `preview-item${item.recognised ? '' : ' unknown'}`
 
     const left = document.createElement('div')
+    let chips = null
     if (!item.recognised) {
       left.innerHTML = `<div>${escapeHtml(item.raw)}</div><div class="sub">Not recognised — this won't be counted</div>`
       if (item.suggestions?.length) {
-        const chips = document.createElement('div')
+        chips = document.createElement('div')
         chips.className = 'didyoumean'
         chips.innerHTML = '<span class="lead">Did you mean</span>'
         for (const suggestion of item.suggestions) {
@@ -382,7 +383,6 @@ function renderPreview(items) {
           })
           chips.appendChild(chip)
         }
-        row.appendChild(chips)
       }
     } else if (state.kind === 'meal') {
       const portion = item.portion ? ` · about ${item.portion.count} ${escapeHtml(item.portion.unit)}` : ''
@@ -395,6 +395,7 @@ function renderPreview(items) {
       left.innerHTML = `<div>${escapeHtml(item.name)}</div><div class="sub">${item.kcal} kcal${extras.length ? ' · ' + extras.join(' · ') : ''}</div>`
     }
     row.appendChild(left)
+    if (chips) row.appendChild(chips)
 
     if (item.recognised) {
       const input = document.createElement('input')

@@ -637,6 +637,26 @@ nav.tabs button[aria-current='true'] { color: var(--accent); font-weight: 600; }
 }
 .onboard-inner .login-err { text-align: center; }
 
+/* Day food audit */
+.audit-btn { grid-column: 1 / -1; justify-self: start; margin-top: 2px; }
+.audit-headline { font-size: 0.95rem; font-weight: 600; margin: 4px 0 12px; }
+.finding.audit-swap, .finding.audit-cut, .finding.audit-keep {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.audit-ico { flex: 0 0 auto; font-size: 0.95rem; opacity: 0.8; margin-top: 1px; }
+.audit-why { color: var(--muted); font-size: 0.8rem; margin-top: 3px; }
+.audit-save {
+  margin-left: auto;
+  flex: 0 0 auto;
+  color: var(--good);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+}
+.finding.audit-cut .audit-save { color: var(--bad); }
+
 /* Plan screen: live session card */
 .session-row {
   display: grid;

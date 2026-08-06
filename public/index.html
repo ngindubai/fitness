@@ -226,6 +226,9 @@
           <div class="hero-stat"><span class="k" id="net-label">Deficit</span><span class="v" id="net-figure">0</span></div>
         </div>
         <div class="bars" id="bars"></div>
+        <button class="btn small audit-btn" id="analyse-day" type="button">
+          <svg class="ico"><use href="#i-coach"/></svg> Analyse my day
+        </button>
       </div>
 
       <div class="card plan-card hidden" id="plan-card">
@@ -532,6 +535,22 @@
         <button class="btn ghost" id="picked-back">Back</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Food audit sheet -->
+<div id="audit-sheet" class="sheet hidden" role="dialog" aria-label="Food audit">
+  <div class="sheet-panel move-panel">
+    <div class="sheet-head">
+      <div>
+        <h2>Where the calories went</h2>
+        <div class="move-muscles" id="audit-date"></div>
+      </div>
+      <button class="icon-btn" id="audit-close" aria-label="Close"><svg class="ico"><use href="#i-x"/></svg></button>
+    </div>
+    <p class="audit-headline" id="audit-headline"></p>
+    <div id="audit-findings"></div>
+    <p class="hint" id="audit-potential"></p>
   </div>
 </div>
 

@@ -681,6 +681,62 @@ function renderPlanBlock(block) {
   return wrap
 }
 
+// ---------------------------------------------------------- food audit
+
+const AUDIT_ICONS = { cut: '✂', swap: '⇄', keep: '★', note: '·' }
+
+$('analyse-day').addEventListener('click', async () => {
+  $('audit-sheet').classList.remove('hidden')
+  $('audit-date').textContent = labelForDate(state.date)
+  $('audit-headline').textContent = 'Reading the day…'
+  $('audit-findings').innerHTML = ''
+  $('audit-potential').textContent = ''
+  try {
+    const data = await api(`/food-audit?date=${state.date}`)
+    $('audit-headline').textContent = data.headline
+    $('audit-findings').innerHTML = data.findings.map((f) => {
+      if (f.kind === 'swap') {
+        return `<div class="finding audit-${f.kind}">
+          <span class="audit-ico">${AUDIT_ICONS[f.kind]}</span>
+          <div><b>${escapeHtml(f.item)}</b> (${f.itemKcal} kcal)
+            ${f.swapTo ? `→ <b>${escapeHtml(f.swapTo)}</b>` : ''}
+            <div class="audit-why">${escapeHtml(f.why)}</div></div>
+          ${f.saveKcal ? `<span class="audit-save">−${f.saveKcal}</span>` : ''}
+        </div>`
+      }
+      if (f.kind === 'cut') {
+        return `<div class="finding audit-cut">
+          <span class="audit-ico">${AUDIT_ICONS.cut}</span>
+          <div><b>${escapeHtml(f.item)}</b> — cut it
+            <div class="audit-why">${escapeHtml(f.why)}</div></div>
+          <span class="audit-save">−${f.saveKcal}</span>
+        </div>`
+      }
+      if (f.kind === 'keep') {
+        return `<div class="finding good audit-keep">
+          <span class="audit-ico">${AUDIT_ICONS.keep}</span>
+          <div><b>${escapeHtml(f.item)}</b> — keep it
+            <div class="audit-why">${escapeHtml(f.why)}</div></div>
+        </div>`
+      }
+      return `<div class="finding note audit-note">${escapeHtml(f.why)}</div>`
+    }).join('') || '<p class="empty">Log some food first — then there is something to analyse.</p>'
+    if (data.potential) {
+      $('audit-potential').textContent =
+        `Take the lot and today lands at ${data.potential.wouldBe.toLocaleString()} kcal ` +
+        `(target ${data.potential.target.toLocaleString()}) — ` +
+        (data.potential.onTarget ? 'inside your target.' : 'closer, but still over.')
+    }
+  } catch (error) {
+    $('audit-headline').textContent = error.message
+  }
+})
+
+$('audit-close').addEventListener('click', () => $('audit-sheet').classList.add('hidden'))
+$('audit-sheet').addEventListener('click', (event) => {
+  if (event.target === $('audit-sheet')) $('audit-sheet').classList.add('hidden')
+})
+
 // --------------------------------------------------------- movement guide
 
 let moveAnim = null

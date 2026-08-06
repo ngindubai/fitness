@@ -8,6 +8,7 @@
 import { parseMeal, parseWorkout, activityKcal, reweighFoodItem, suggestFoods, suggestWorkouts } from './parse.js'
 import { buildDay, buildWeek, summarisePeriod, targetsFor, climateAdjustedKcal, DEFAULT_PROFILE, BASELINE_LEVELS, GOALS, CLIMATES, EAT_BACK, bmiInfo, BMI_BANDS } from './engine.js'
 import { reviewDay, reviewWeek } from './coach.js'
+import { auditDay } from './food-audit.js'
 import { recommendMeals, suggestDay, buildTasteProfile } from './recommend.js'
 import { FOODS, FOODS_BY_ID } from './data/foods.js'
 import { ACTIVITIES } from './data/activities.js'
@@ -564,6 +565,15 @@ export async function handleApi(request, ctx) {
   if (pantryMatch && method === 'DELETE') {
     const removed = await store.deletePantryItem(userId, pantryMatch[1])
     return removed ? json({ ok: true }) : error(404, 'Not in your pantry.')
+  }
+
+  // -------------------------------------------------------------- food audit
+  if (path === '/food-audit' && method === 'GET') {
+    const date = isValidDate(url.searchParams.get('date')) ? url.searchParams.get('date') : today
+    const entries = await store.listEntries(userId, date, date)
+    const { meals, workouts } = partition(entries)
+    const day = buildDay({ profile, meals, workouts, date })
+    return json({ date, ...auditDay(meals, day) })
   }
 
   // --------------------------------------------------------------------- day

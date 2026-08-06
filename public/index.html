@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e1116">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Fitness</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon.svg">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<!-- ------------------------------------------------------------- login -->
+<section id="login" class="login hidden">
+  <h1>Fitness</h1>
+  <p>Enter your passcode.</p>
+  <form id="login-form">
+    <input id="passcode" type="password" inputmode="numeric" autocomplete="current-password"
+           placeholder="passcode" aria-label="Passcode">
+    <button class="btn primary" style="width:100%" type="submit">Unlock</button>
+  </form>
+  <p id="login-error" class="hint" style="color:var(--bad)"></p>
+</section>
+
+<!-- --------------------------------------------------------------- app -->
+<main id="app" class="app hidden">
+
+  <header class="top">
+    <div>
+      <h1 id="greeting">Today</h1>
+      <div class="date" id="date-label"></div>
+    </div>
+    <div class="date-nav">
+      <button id="prev-day" aria-label="Previous day">&larr;</button>
+      <button id="next-day" aria-label="Next day">&rarr;</button>
+    </div>
+  </header>
+
+  <!-- ============================================================ TODAY -->
+  <section id="view-today">
+    <div class="card">
+      <div class="balance">
+        <div>
+          <div class="big" id="net-figure">—</div>
+          <div class="unit" id="net-label">kcal</div>
+        </div>
+        <div class="split">
+          <div>In <b id="kcal-in">0</b></div>
+          <div>Out <b id="kcal-out">0</b></div>
+        </div>
+      </div>
+      <div class="bars" id="bars"></div>
+    </div>
+
+    <div class="card logger">
+      <h2>Log something</h2>
+      <div class="seg" id="kind-seg">
+        <button data-kind="meal" aria-pressed="true">Food</button>
+        <button data-kind="workout" aria-pressed="false">Training</button>
+        <button data-kind="weight" aria-pressed="false">Weight</button>
+      </div>
+      <div class="seg" id="slot-seg">
+        <button data-slot="breakfast" aria-pressed="false">Breakfast</button>
+        <button data-slot="lunch" aria-pressed="false">Lunch</button>
+        <button data-slot="dinner" aria-pressed="false">Dinner</button>
+        <button data-slot="snack" aria-pressed="false">Snack</button>
+      </div>
+      <textarea id="entry-text" enterkeyhint="done"
+                placeholder="2 eggs, 3 rashers bacon, wholemeal toast and a black coffee"></textarea>
+      <div class="preview" id="preview"></div>
+      <div class="actions">
+        <button class="btn primary" id="save-entry">Log it</button>
+        <button class="btn ghost" id="clear-entry">Clear</button>
+      </div>
+      <p class="hint" id="logger-hint">Type it how you'd say it. Weights, counts and portions all work
+        &mdash; "200g chicken", "2 slices", "ran 5k in 26 min", "45 min weights", "9000 steps".</p>
+    </div>
+
+    <div class="card">
+      <h2>Today's log</h2>
+      <div id="entries"></div>
+    </div>
+  </section>
+
+  <!-- ============================================================ COACH -->
+  <section id="view-coach" class="hidden">
+    <div class="card">
+      <h2>The verdict</h2>
+      <div class="verdict">
+        <div class="score" id="score">—</div>
+        <div>
+          <div class="label" id="verdict-label">No data</div>
+          <div class="sub" id="verdict-sub"></div>
+        </div>
+      </div>
+      <div class="narrative hidden" id="narrative"></div>
+      <div class="findings" id="findings"></div>
+      <div class="actions">
+        <button class="btn ghost" id="refresh-review">Re-run review</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Last 7 days</h2>
+      <div class="week-grid" id="week-stats"></div>
+      <div class="findings" id="week-findings"></div>
+    </div>
+  </section>
+
+  <!-- ============================================================ MEALS -->
+  <section id="view-meals" class="hidden">
+    <div class="card">
+      <h2>What to eat next</h2>
+      <div class="seg" id="meal-slot-seg">
+        <button data-mealslot="" aria-pressed="true">Any</button>
+        <button data-mealslot="breakfast" aria-pressed="false">Breakfast</button>
+        <button data-mealslot="lunch" aria-pressed="false">Lunch</button>
+        <button data-mealslot="dinner" aria-pressed="false">Dinner</button>
+        <button data-mealslot="snack" aria-pressed="false">Snack</button>
+      </div>
+      <div id="recommendations"></div>
+    </div>
+
+    <div class="card">
+      <h2>What you actually eat</h2>
+      <div class="chips" id="favourites"></div>
+      <p class="hint" id="taste-hint"></p>
+    </div>
+  </section>
+
+  <!-- =========================================================== TRENDS -->
+  <section id="view-trends" class="hidden">
+    <div class="card">
+      <h2>Daily balance &mdash; 30 days</h2>
+      <svg class="sparkline" id="balance-chart" viewBox="0 0 300 96" preserveAspectRatio="none"
+           role="img" aria-label="Daily calorie balance over the last 30 days"></svg>
+      <p class="hint">Bars above the line are surplus days, below are deficit days.</p>
+    </div>
+    <div class="card">
+      <h2>Weight</h2>
+      <svg class="sparkline" id="weight-chart" viewBox="0 0 300 96" preserveAspectRatio="none"
+           role="img" aria-label="Body weight trend"></svg>
+      <p class="hint" id="weight-hint">Log your weight from the Today tab to build this up.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================== YOU -->
+  <section id="view-you" class="hidden">
+    <div class="card">
+      <h2>Your numbers</h2>
+      <form id="profile-form">
+        <div class="field">
+          <label for="p-name">Name</label>
+          <input id="p-name" type="text" autocomplete="name">
+        </div>
+        <div class="grid-2">
+          <div class="field">
+            <label for="p-sex">Sex</label>
+            <select id="p-sex">
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="other">Prefer not to say</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="p-age">Age</label>
+            <input id="p-age" type="number" min="13" max="100" inputmode="numeric">
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="field">
+            <label for="p-height">Height (cm)</label>
+            <input id="p-height" type="number" min="120" max="230" inputmode="numeric">
+          </div>
+          <div class="field">
+            <label for="p-weight">Weight (kg)</label>
+            <input id="p-weight" type="number" min="30" max="400" step="0.1" inputmode="decimal">
+          </div>
+        </div>
+        <div class="field">
+          <label for="p-baseline">Daily life, outside training</label>
+          <select id="p-baseline"></select>
+        </div>
+        <div class="grid-2">
+          <div class="field">
+            <label for="p-goal">Goal</label>
+            <select id="p-goal"></select>
+          </div>
+          <div class="field">
+            <label for="p-rate">Rate (kg/week)</label>
+            <input id="p-rate" type="number" min="0" max="1.5" step="0.05" inputmode="decimal">
+          </div>
+        </div>
+        <div class="field">
+          <label for="p-timezone">Timezone</label>
+          <input id="p-timezone" type="text">
+        </div>
+        <button class="btn primary" style="width:100%" type="submit">Save</button>
+      </form>
+      <p class="hint" id="targets-summary"></p>
+    </div>
+    <div class="card">
+      <h2>Session</h2>
+      <button class="btn ghost" id="logout">Sign out</button>
+    </div>
+  </section>
+
+  <nav class="tabs">
+    <button data-view="today" aria-current="true"><span class="ico">&#9679;</span>Today</button>
+    <button data-view="coach" aria-current="false"><span class="ico">&#9998;</span>Coach</button>
+    <button data-view="meals" aria-current="false"><span class="ico">&#9737;</span>Meals</button>
+    <button data-view="trends" aria-current="false"><span class="ico">&#9650;</span>Trends</button>
+    <button data-view="you" aria-current="false"><span class="ico">&#9788;</span>You</button>
+  </nav>
+</main>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>

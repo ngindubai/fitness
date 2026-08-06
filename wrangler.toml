@@ -1,0 +1,25 @@
+name = "fitness"
+main = "src/worker.js"
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Static assets (the phone UI) are served straight from the edge.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# Create the database first:
+#   npx wrangler d1 create fitness
+# then paste the database_id it prints in below.
+[[d1_databases]]
+binding = "DB"
+database_name = "fitness"
+database_id = "PASTE_YOUR_DATABASE_ID_HERE"
+
+# Secrets are NOT set here — they would end up in git. Set them with:
+#   npx wrangler secret put APP_PASSCODE       (required)
+#   npx wrangler secret put SESSION_SECRET     (optional, any long random string)
+#   npx wrangler secret put ANTHROPIC_API_KEY  (optional, enables AI commentary)
+
+[observability]
+enabled = true

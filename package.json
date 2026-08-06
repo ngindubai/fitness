@@ -1,0 +1,25 @@
+{
+  "name": "fitness",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Personal food and fitness tracker with a brutally honest daily coach",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "dev:worker": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute fitness --remote --file=./schema.sql",
+    "db:init:local": "wrangler d1 execute fitness --local --file=./schema.sql",
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.70.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

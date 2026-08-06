@@ -166,7 +166,7 @@ function showView(view) {
   if (view === 'plan') loadPlanOverview()
   if (view === 'coach') loadReview()
   if (view === 'stats') loadStats()
-  if (view === 'meals') loadRecommendations()
+  if (view === 'meals') { loadRecommendations(); loadIngredients() }
 }
 
 // ------------------------------------------------------------ date + strips
@@ -1205,6 +1205,67 @@ async function loadRecommendations() {
   } catch (error) {
     $('recommendations').innerHTML = `<p class="empty">${escapeHtml(error.message)}</p>`
   }
+}
+
+// ------------------------------------------------------ ingredient library
+
+let ingTimer
+$('ing-search').addEventListener('input', () => {
+  clearTimeout(ingTimer)
+  ingTimer = setTimeout(loadIngredients, 300)
+})
+
+async function loadIngredients() {
+  const query = $('ing-search').value.trim()
+  const container = $('ing-results')
+  try {
+    const { foods } = await api(`/foods?q=${encodeURIComponent(query)}`)
+    if (!foods.length) {
+      container.innerHTML = '<p class="empty">Nothing matches. Try a simpler word — "flour", "mince", "oil".</p>'
+      return
+    }
+    container.innerHTML = ''
+    for (const food of foods) {
+      const row = document.createElement('div')
+      row.className = 'ing-row'
+      const unitNote = food.unit?.name && food.unit?.grams
+        ? ` · 1 ${escapeHtml(food.unit.name)} ≈ ${food.unit.grams} g`
+        : ''
+      row.innerHTML = `
+        <span class="ing-name">${escapeHtml(food.name)}
+          <span class="meta" style="display:block">${food.per100.kcal} kcal · ${food.per100.protein}g P ·
+            ${food.per100.carbs}g C · ${food.per100.fat}g F per 100 g${unitNote}</span>
+        </span>`
+      const add = document.createElement('button')
+      add.className = 'btn small'
+      add.textContent = 'Add'
+      add.addEventListener('click', () => addIngredientToLogger(food))
+      row.appendChild(add)
+      container.appendChild(row)
+    }
+  } catch (error) {
+    container.innerHTML = `<p class="empty">${escapeHtml(error.message)}</p>`
+  }
+}
+
+/** Append an ingredient to the Today logger so a recipe builds up phrase by phrase. */
+function addIngredientToLogger(food) {
+  // Log by the natural unit's weight when one exists, otherwise 100 g — the
+  // preview's gram inputs are where the real weights get set.
+  const grams = food.unit?.grams || 100
+  const cleanName = food.name.replace(/\s*\(.*?\)\s*$/, '')
+  const box = $('entry-text')
+  const existing = box.value.trim()
+  box.value = existing ? `${existing.replace(/,\s*$/, '')}, ${grams}g ${cleanName}` : `${grams}g ${cleanName}`
+
+  if (state.kind !== 'meal') {
+    state.kind = 'meal'
+    document.querySelectorAll('#kind-seg button').forEach((b) =>
+      b.setAttribute('aria-pressed', String(b.dataset.kind === 'meal')))
+    $('slot-seg').classList.remove('hidden')
+  }
+  toast(`${cleanName} added to the logger — open Today to weigh and save.`)
+  previewParse()
 }
 
 async function logSuggestedMeal(meals, id) {

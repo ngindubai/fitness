@@ -764,3 +764,18 @@ nav.tabs button[aria-current='true'] { color: var(--accent); font-weight: 600; }
   gap: 8px;
   flex-wrap: wrap;
 }
+
+/* --------------------------------------------------- ingredient library */
+
+.ing-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.ing-row:first-child { border-top: 0; }
+.ing-name { font-size: 0.88rem; min-width: 0; }
+.ing-row .btn { flex: none; }
+#ing-results { max-height: 420px; overflow-y: auto; }

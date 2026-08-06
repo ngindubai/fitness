@@ -1,0 +1,8 @@
+# Keep line endings identical on every machine. Without this, Git's Windows
+# default rewrites LF to CRLF on checkout, so the files deployed from a Windows
+# box differ byte-for-byte from the same commit on Linux. Harmless for a
+# browser, but it makes "is what I tested what is deployed?" unanswerable.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary

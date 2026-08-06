@@ -32,17 +32,54 @@ export const GOALS = {
 /** Energy content of one kilogram of body-fat tissue, in kcal. */
 const KCAL_PER_KG = 7700
 
+export const CLIMATES = {
+  hot: { label: 'Hot (Gulf summer, outdoor training in heat)' },
+  temperate: { label: 'Temperate' },
+}
+
 export const DEFAULT_PROFILE = {
   name: '',
   sex: 'male',
-  age: 40,
+  age: 37,
   heightCm: 178,
-  weightKg: 85,
+  weightKg: 115,
   baseline: 'light',
   goal: 'lose',
   rateKgPerWeek: 0.5,
-  timezone: 'Europe/London',
+  timezone: 'Asia/Dubai',
+  climate: 'hot',
   proteinPerKg: null, // null = derive from goal
+}
+
+/**
+ * Heat adjustment for outdoor work in a hot climate.
+ *
+ * Thermoregulation in serious heat (Dubai summer is 38-45C) raises the energy
+ * cost of the same pace - studies put it in the 5-13% range depending on
+ * intensity and acclimatisation. 8% is a deliberately modest middle: enough to
+ * stop the log short-changing genuinely hard conditions, small enough that it
+ * cannot be used to justify a kebab.
+ */
+export const HEAT_MULTIPLIER = 1.08
+
+export function climateAdjustedKcal(baseKcal, item, profile) {
+  if (profile?.climate === 'hot' && item?.outdoor) {
+    return Math.round(baseKcal * HEAT_MULTIPLIER)
+  }
+  return Math.round(baseKcal)
+}
+
+/**
+ * Daily fluid target in ml. 35 ml/kg is the standard clinical baseline; a hot
+ * climate adds a flat 500 ml, and training adds ~250 ml per half hour (capped,
+ * because a three-hour golf round does not need three extra litres counted
+ * here - you drink through it anyway).
+ */
+export function waterTargetMl(profile, trainingMinutes = 0) {
+  const base = profile.weightKg * 35
+  const climate = profile.climate === 'hot' ? 500 : 0
+  const training = Math.min(1500, Math.round(trainingMinutes / 30) * 250)
+  return Math.round((base + climate + training) / 250) * 250
 }
 
 /**
@@ -105,12 +142,22 @@ export function targetsFor(p, exerciseKcal = 0) {
 
   calories = Math.round(calories)
 
-  // Protein: 1.6-2.2 g/kg is the evidence-backed range for people training.
-  // The top of that range is where you want to be in a deficit, because that
-  // is when lean mass is most at risk.
+  // Protein: 1.6-2.2 g/kg is the evidence-backed range for people training,
+  // and the top of it is where to be in a deficit. But that per-kg figure is
+  // meant to scale with lean tissue, so above BMI 30 it is applied to an
+  // adjusted body weight (ideal + 40% of the excess) - the standard clinical
+  // correction. Otherwise a heavier person gets handed an impossible number
+  // and fails it every day for no physiological reason.
   const proteinPerKg =
     p.proteinPerKg || (goal === 'lose' ? 2.0 : goal === 'gain' ? 1.8 : 1.6)
-  const protein = Math.round(p.weightKg * proteinPerKg)
+  const heightM = p.heightCm / 100
+  const bmi = p.weightKg / (heightM * heightM)
+  let proteinWeight = p.weightKg
+  if (bmi > 30) {
+    const idealKg = 25 * heightM * heightM
+    proteinWeight = idealKg + 0.4 * (p.weightKg - idealKg)
+  }
+  const protein = Math.round(proteinWeight * proteinPerKg)
 
   // Fat floor of 0.6 g/kg protects hormone production and fat-soluble vitamin
   // absorption; below that a diet stops being merely unpleasant.
@@ -175,7 +222,11 @@ export function sumWorkouts(workouts, weightKg) {
   let moderateMinutes = 0
   let strengthMinutes = 0
   let cardioMinutes = 0
+  let outdoorMinutes = 0
   let distanceKm = 0
+  let volumeKg = 0
+  let sets = 0
+  const volumeByGroup = {}
 
   for (const workout of workouts) {
     for (const item of workout.items || []) {
@@ -186,8 +237,18 @@ export function sumWorkouts(workouts, weightKg) {
       const tags = item.tags || []
       if (tags.includes('strength')) strengthMinutes += item.minutes || 0
       if (tags.includes('cardio')) cardioMinutes += item.minutes || 0
+      if (item.outdoor) outdoorMinutes += item.minutes || 0
       if (tags.includes('vigorous')) vigorousMinutes += item.minutes || 0
       else if (item.met >= 3) moderateMinutes += item.minutes || 0
+
+      if (item.exercise) {
+        sets += item.exercise.sets || 0
+        if (item.exercise.volume) {
+          volumeKg += item.exercise.volume
+          const group = item.exercise.group || 'full'
+          volumeByGroup[group] = (volumeByGroup[group] || 0) + item.exercise.volume
+        }
+      }
     }
   }
 
@@ -198,7 +259,11 @@ export function sumWorkouts(workouts, weightKg) {
     moderateMinutes: Math.round(moderateMinutes),
     strengthMinutes: Math.round(strengthMinutes),
     cardioMinutes: Math.round(cardioMinutes),
+    outdoorMinutes: Math.round(outdoorMinutes),
     distanceKm: Math.round(distanceKm * 10) / 10,
+    volumeKg: Math.round(volumeKg),
+    sets,
+    volumeByGroup,
     // WHO counts one vigorous minute as two moderate minutes.
     equivalentModerateMinutes: Math.round(moderateMinutes + vigorousMinutes * 2),
   }
@@ -211,12 +276,15 @@ export function sumWorkouts(workouts, weightKg) {
  * @param {typeof DEFAULT_PROFILE} args.profile
  * @param {Array} args.meals
  * @param {Array} args.workouts
+ * @param {Array} [args.waters]  water entries with a `value` in ml
  * @param {string} args.date
  */
-export function buildDay({ profile, meals = [], workouts = [], date }) {
+export function buildDay({ profile, meals = [], workouts = [], waters = [], date }) {
   const nutrition = sumMeals(meals)
   const training = sumWorkouts(workouts, profile.weightKg)
   const targets = targetsFor(profile, training.kcal)
+  const waterMl = waters.reduce((sum, entry) => sum + (Number(entry.value) || 0), 0)
+  const waterTarget = waterTargetMl(profile, training.minutes)
 
   const caloriesIn = nutrition.totals.kcal
   const caloriesOut = targets.baseline + training.kcal
@@ -240,7 +308,8 @@ export function buildDay({ profile, meals = [], workouts = [], date }) {
     alcoholKcal: nutrition.alcoholKcal,
     tagKcal: Object.fromEntries(nutrition.tags),
     training,
-    targets,
+    targets: { ...targets, waterMl: waterTarget },
+    waterMl,
     adherence: {
       caloriePct: Math.round(caloriePct),
       proteinPct: Math.round(proteinPct),
@@ -282,6 +351,78 @@ export function buildWeek(days) {
     equivalentModerateMinutes: sum((d) => d.training.equivalentModerateMinutes),
     totalDistanceKm: Math.round(sum((d) => d.training.distanceKm) * 10) / 10,
     projectedKgPerWeek: Math.round(((avgNet * 7) / KCAL_PER_KG) * 100) / 100,
+  }
+}
+
+/**
+ * Aggregate any run of built days into the numbers a summary screen needs.
+ * Used for the weekly and monthly views; daily is just buildDay itself.
+ *
+ * @param {Array<ReturnType<typeof buildDay>>} days oldest first
+ * @param {Array<{date:string, value:number}>} [weighIns]
+ */
+export function summarisePeriod(days, weighIns = []) {
+  const logged = days.filter((d) => d.logged)
+  const sum = (fn) => logged.reduce((acc, d) => acc + fn(d), 0)
+  const count = logged.length
+
+  const volumeByGroup = {}
+  for (const day of logged) {
+    for (const [group, volume] of Object.entries(day.training.volumeByGroup || {})) {
+      volumeByGroup[group] = (volumeByGroup[group] || 0) + volume
+    }
+  }
+
+  // Longest run of consecutive logged days within the window.
+  let streak = 0
+  let bestStreak = 0
+  for (const day of days) {
+    streak = day.logged ? streak + 1 : 0
+    if (streak > bestStreak) bestStreak = streak
+  }
+
+  const weights = [...weighIns].sort((a, b) => a.date.localeCompare(b.date))
+  const weightChange = weights.length >= 2
+    ? Math.round((weights[weights.length - 1].value - weights[0].value) * 10) / 10
+    : null
+
+  const avgNet = count ? sum((d) => d.net) / count : 0
+
+  return {
+    days: days.map((d) => ({
+      date: d.date,
+      logged: d.logged,
+      in: d.caloriesIn,
+      out: d.caloriesOut,
+      net: d.net,
+      protein: d.nutrition.protein,
+      trainingMinutes: d.training.minutes,
+      strengthMinutes: d.training.strengthMinutes,
+      volumeKg: d.training.volumeKg,
+      waterMl: d.waterMl || 0,
+      score: null, // filled by the caller when it has reviews to hand
+    })),
+    loggedDays: count,
+    totalDays: days.length,
+    avgIn: count ? Math.round(sum((d) => d.caloriesIn) / count) : 0,
+    avgOut: count ? Math.round(sum((d) => d.caloriesOut) / count) : 0,
+    avgNet: Math.round(avgNet),
+    avgProtein: count ? Math.round(sum((d) => d.nutrition.protein) / count) : 0,
+    avgFibre: count ? Math.round(sum((d) => d.nutrition.fibre) / count) : 0,
+    avgWaterMl: count ? Math.round(sum((d) => d.waterMl || 0) / count) : 0,
+    totalTrainingMinutes: sum((d) => d.training.minutes),
+    trainingDays: logged.filter((d) => d.training.minutes > 0).length,
+    strengthDays: logged.filter((d) => d.training.strengthMinutes > 0).length,
+    totalVolumeKg: Math.round(sum((d) => d.training.volumeKg || 0)),
+    totalSets: sum((d) => d.training.sets || 0),
+    volumeByGroup,
+    totalDistanceKm: Math.round(sum((d) => d.training.distanceKm) * 10) / 10,
+    alcoholDays: logged.filter((d) => d.alcoholKcal > 0).length,
+    daysOnTarget: logged.filter((d) => d.caloriesIn > 0 && d.caloriesIn <= d.targets.calories * 1.05).length,
+    bestStreak,
+    projectedKgPerWeek: count ? Math.round(((avgNet * 7) / KCAL_PER_KG) * 100) / 100 : 0,
+    weightChange,
+    weights,
   }
 }
 

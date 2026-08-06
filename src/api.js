@@ -6,7 +6,7 @@
  */
 
 import { parseMeal, parseWorkout, activityKcal, reweighFoodItem } from './parse.js'
-import { buildDay, buildWeek, targetsFor, DEFAULT_PROFILE, BASELINE_LEVELS, GOALS } from './engine.js'
+import { buildDay, buildWeek, summarisePeriod, targetsFor, climateAdjustedKcal, DEFAULT_PROFILE, BASELINE_LEVELS, GOALS, CLIMATES } from './engine.js'
 import { reviewDay, reviewWeek } from './coach.js'
 import { recommendMeals, suggestDay, buildTasteProfile } from './recommend.js'
 import { FOODS, FOODS_BY_ID } from './data/foods.js'
@@ -51,7 +51,8 @@ function partition(entries) {
   const meals = entries.filter((e) => e.kind === 'meal')
   const workouts = entries.filter((e) => e.kind === 'workout')
   const weights = entries.filter((e) => e.kind === 'weight')
-  return { meals, workouts, weights }
+  const waters = entries.filter((e) => e.kind === 'water')
+  return { meals, workouts, weights, waters }
 }
 
 /**
@@ -65,8 +66,12 @@ function decorateFoodItems(items) {
   }))
 }
 
-function decorateWorkoutItems(items, weightKg) {
-  return items.map((item) => ({ ...item, kcal: activityKcal(item, weightKg) }))
+function decorateWorkoutItems(items, profile) {
+  return items.map((item) => {
+    const base = activityKcal(item, profile.weightKg)
+    const kcal = climateAdjustedKcal(base, item, profile)
+    return { ...item, kcal, heatAdjusted: kcal !== base }
+  })
 }
 
 /** Build every day in a range, oldest first. */
@@ -79,8 +84,8 @@ function buildDayRange(profile, entries, from, to) {
 
   const days = []
   for (let date = from; date <= to; date = addDays(date, 1)) {
-    const { meals, workouts } = partition(byDate.get(date) || [])
-    days.push(buildDay({ profile, meals, workouts, date }))
+    const { meals, workouts, waters } = partition(byDate.get(date) || [])
+    days.push(buildDay({ profile, meals, workouts, waters, date }))
   }
   return days
 }
@@ -135,7 +140,7 @@ export async function handleApi(request, ctx) {
       return json({
         profile,
         targets: targetsFor(profile, 0),
-        options: { baselines: BASELINE_LEVELS, goals: GOALS },
+        options: { baselines: BASELINE_LEVELS, goals: GOALS, climates: CLIMATES },
         today,
       })
     }
@@ -154,7 +159,7 @@ export async function handleApi(request, ctx) {
     if (kind === 'meal') {
       return json({ kind, items: decorateFoodItems(parseMeal(body?.text || '')) })
     }
-    return json({ kind, items: decorateWorkoutItems(parseWorkout(body?.text || ''), profile.weightKg) })
+    return json({ kind, items: decorateWorkoutItems(parseWorkout(body?.text || ''), profile) })
   }
 
   // ----------------------------------------------------------------- entries
@@ -175,7 +180,17 @@ export async function handleApi(request, ctx) {
       return json({ entry }, { status: 201 })
     }
 
-    if (kind !== 'meal' && kind !== 'workout') return error(400, 'kind must be meal, workout or weight.')
+    if (kind === 'water') {
+      const value = Number(body.value)
+      if (!Number.isFinite(value) || value < 50 || value > 3000) {
+        return error(400, 'Water should be between 50 and 3000 ml per entry.')
+      }
+      const entry = { id: newId(), date, kind: 'water', slot: null, raw: null, items: [], value, createdAt: new Date().toISOString() }
+      await store.addEntry(entry)
+      return json({ entry }, { status: 201 })
+    }
+
+    if (kind !== 'meal' && kind !== 'workout') return error(400, 'kind must be meal, workout, weight or water.')
 
     const text = String(body?.text || '').trim()
     let items = Array.isArray(body?.items) && body.items.length ? body.items : null
@@ -186,13 +201,13 @@ export async function handleApi(request, ctx) {
     }
     items = kind === 'meal'
       ? decorateFoodItems(items)
-      : decorateWorkoutItems(items, profile.weightKg)
+      : decorateWorkoutItems(items, profile)
 
     const entry = {
       id: newId(),
       date,
       kind,
-      slot: kind === 'meal' ? (body?.slot || inferSlot()) : null,
+      slot: kind === 'meal' ? (body?.slot || inferSlot(profile.timezone)) : null,
       raw: text,
       items,
       value: null,
@@ -218,15 +233,26 @@ export async function handleApi(request, ctx) {
       if (isValidDate(body?.date)) patch.date = body.date
       if (body?.slot) patch.slot = body.slot
 
+      // Remove one item from an entry; removing the last item deletes it.
+      if (typeof body?.removeIndex === 'number') {
+        const items = existing.items.filter((_, index) => index !== body.removeIndex)
+        if (!items.length) {
+          await store.deleteEntry(id)
+          return json({ entry: null, deleted: true })
+        }
+        const updated = await store.updateEntry(id, { items })
+        return json({ entry: updated })
+      }
+
       if (Array.isArray(body?.items)) {
         patch.items = existing.kind === 'meal'
           ? decorateFoodItems(body.items)
-          : decorateWorkoutItems(body.items, profile.weightKg)
+          : decorateWorkoutItems(body.items, profile)
       } else if (typeof body?.text === 'string') {
         patch.raw = body.text
         patch.items = existing.kind === 'meal'
           ? decorateFoodItems(parseMeal(body.text))
-          : decorateWorkoutItems(parseWorkout(body.text), profile.weightKg)
+          : decorateWorkoutItems(parseWorkout(body.text), profile)
       } else if (body?.reweigh && typeof body.reweigh.index === 'number') {
         // Adjust a single item's portion without re-parsing the whole entry.
         const items = [...existing.items]
@@ -237,7 +263,7 @@ export async function handleApi(request, ctx) {
             : { ...items[index], minutes: Number(body.reweigh.minutes) || items[index].minutes }
           patch.items = existing.kind === 'meal'
             ? items
-            : decorateWorkoutItems(items, profile.weightKg)
+            : decorateWorkoutItems(items, profile)
         }
       }
 
@@ -249,27 +275,64 @@ export async function handleApi(request, ctx) {
   // --------------------------------------------------------------------- day
   if (path === '/day' && method === 'GET') {
     const date = isValidDate(url.searchParams.get('date')) ? url.searchParams.get('date') : today
-    // Pull a fortnight so the coach can see streaks and recent context.
-    const from = addDays(date, -13)
+    // A month of context: the coach reads streaks from it and the header shows
+    // the logging streak, which caps at "30+".
+    const from = addDays(date, -29)
     const entries = await store.listEntries(from, date)
     const todaysEntries = entries.filter((e) => e.date === date)
-    const { meals, workouts, weights } = partition(todaysEntries)
+    const { meals, workouts, weights, waters } = partition(todaysEntries)
 
     const days = buildDayRange(profile, entries, from, date)
     const day = days[days.length - 1]
     const review = reviewDay(day, profile, days.slice(0, -1))
 
+    // Consecutive logged days ending at this one (or the day before, so an
+    // unlogged morning does not read as a broken streak).
+    let streak = 0
+    for (let i = days.length - (day.logged ? 1 : 2); i >= 0; i -= 1) {
+      if (days[i]?.logged) streak += 1
+      else break
+    }
+
     return json({
       date,
       day,
       review,
-      entries: { meals, workouts, weights },
+      entries: { meals, workouts, weights, waters },
       remaining: {
         kcal: Math.round(day.targets.calories - day.caloriesIn),
         protein: Math.round(day.targets.protein - day.nutrition.protein),
+        waterMl: Math.max(0, (day.targets.waterMl || 0) - (day.waterMl || 0)),
       },
+      streak: streak >= 30 ? '30+' : streak,
       isToday: date === today,
     })
+  }
+
+  // ----------------------------------------------------------------- summary
+  if (path === '/summary' && method === 'GET') {
+    const date = isValidDate(url.searchParams.get('date')) ? url.searchParams.get('date') : today
+    const period = url.searchParams.get('period') === 'month' ? 'month' : 'week'
+
+    let from
+    let to
+    if (period === 'month') {
+      from = `${date.slice(0, 7)}-01`
+      const [year, month] = date.slice(0, 7).split('-').map(Number)
+      const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate()
+      to = `${date.slice(0, 7)}-${String(lastDay).padStart(2, '0')}`
+    } else {
+      from = addDays(date, -6)
+      to = date
+    }
+
+    const entries = await store.listEntries(from, to)
+    const days = buildDayRange(profile, entries, from, to)
+    const weighIns = entries
+      .filter((e) => e.kind === 'weight')
+      .map((e) => ({ date: e.date, value: e.value }))
+
+    return json({ period, from, to, today, ...summarisePeriod(days, weighIns) })
   }
 
   // -------------------------------------------------------------------- week
@@ -407,12 +470,19 @@ async function readJson(request) {
   }
 }
 
-/** Guess a meal slot from the clock when the client does not say. */
-function inferSlot(date = new Date()) {
-  const hour = date.getUTCHours()
-  if (hour < 10) return 'breakfast'
-  if (hour < 15) return 'lunch'
-  if (hour < 21) return 'dinner'
+/** Guess a meal slot from the clock in the user's own timezone. */
+function inferSlot(timezone = 'UTC') {
+  let hour
+  try {
+    hour = Number(new Intl.DateTimeFormat('en-GB', {
+      timeZone: timezone, hour: 'numeric', hour12: false,
+    }).format(new Date()))
+  } catch {
+    hour = new Date().getUTCHours()
+  }
+  if (hour < 11) return 'breakfast'
+  if (hour < 16) return 'lunch'
+  if (hour < 22) return 'dinner'
   return 'snack'
 }
 
@@ -432,6 +502,7 @@ function sanitiseProfile(input) {
     goal: input.goal in GOALS ? input.goal : DEFAULT_PROFILE.goal,
     rateKgPerWeek: clamp(input.rateKgPerWeek, 0, 1.5, DEFAULT_PROFILE.rateKgPerWeek),
     timezone: String(input.timezone || DEFAULT_PROFILE.timezone).slice(0, 64),
+    climate: input.climate in CLIMATES ? input.climate : DEFAULT_PROFILE.climate,
     proteinPerKg: input.proteinPerKg ? clamp(input.proteinPerKg, 1.0, 3.5, null) : null,
   }
 }

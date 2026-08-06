@@ -3,220 +3,294 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0e1116">
+<meta name="theme-color" content="#0b0d10" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f6f4ef" media="(prefers-color-scheme: light)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Fitness</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon.svg">
+<script>
+/* Apply the saved theme before first paint so there is no flash. */
+(function () {
+  var t = localStorage.getItem('ff_theme')
+  if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t
+})()
+</script>
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
 
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-today" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2.6" fill="currentColor"/></symbol>
+    <symbol id="i-coach" viewBox="0 0 24 24"><path d="M12 3l1.9 5.4L19.5 10l-5.6 1.6L12 17l-1.9-5.4L4.5 10l5.6-1.6z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M18.5 16l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" fill="currentColor"/></symbol>
+    <symbol id="i-stats" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4m6 16v-7m4 7H4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-meals" viewBox="0 0 24 24"><path d="M7 3v7M4.5 3v4.5c0 1.4 1.1 2.5 2.5 2.5s2.5-1.1 2.5-2.5V3M7 13v8M16.5 3c-1.7 1.2-2.5 3.6-2.5 5.5 0 1.7 1.1 2.5 2.5 2.5V21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-you" viewBox="0 0 24 24"><circle cx="12" cy="8.2" r="3.6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4.8 20c.9-3.5 3.8-5.4 7.2-5.4s6.3 1.9 7.2 5.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M3.5 9.5h17M8 3v3.5M16 3v3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+    <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 3.5s6 6.6 6 11a6 6 0 0 1-12 0c0-4.4 6-11 6-11z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+    <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 3s1 2.6 1 4.4c2-1 3.6-.4 4.6 1.6 1.5 3-.1 8-5.6 12-5.5-4-7.1-9-5.6-12 .8-1.7 2.2-2.4 3.8-1.9C10.5 5.4 12 3 12 3z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+    <symbol id="i-chev-l" viewBox="0 0 24 24"><path d="M14.5 5.5 8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="M9.5 5.5 16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M15.5 8.5v-2a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+  </defs>
+</svg>
+
 <!-- ------------------------------------------------------------- login -->
 <section id="login" class="login hidden">
-  <h1>Fitness</h1>
-  <p>Enter your passcode.</p>
-  <form id="login-form">
-    <input id="passcode" type="password" inputmode="numeric" autocomplete="current-password"
-           placeholder="passcode" aria-label="Passcode">
-    <button class="btn primary" style="width:100%" type="submit">Unlock</button>
-  </form>
-  <p id="login-error" class="hint" style="color:var(--bad)"></p>
+  <div class="login-inner">
+    <div class="brand-mark" aria-hidden="true"></div>
+    <h1>Fitness</h1>
+    <p class="serif-sub">Private. Precise. Unsparing.</p>
+    <form id="login-form">
+      <input id="passcode" type="password" inputmode="numeric" autocomplete="current-password"
+             placeholder="Passcode" aria-label="Passcode">
+      <button class="btn primary" style="width:100%" type="submit">Unlock</button>
+    </form>
+    <p id="login-error" class="login-err"></p>
+  </div>
 </section>
 
 <!-- --------------------------------------------------------------- app -->
-<main id="app" class="app hidden">
+<div id="app" class="shell hidden">
 
-  <header class="top">
-    <div>
-      <h1 id="greeting">Today</h1>
-      <div class="date" id="date-label"></div>
+  <!-- ============================================== sidebar (desktop) -->
+  <aside class="side">
+    <div class="brand">
+      <div class="brand-mark small" aria-hidden="true"></div>
+      <div><div class="brand-name">Fitness</div><div class="brand-sub" id="side-today"></div></div>
     </div>
-    <div class="date-nav">
-      <button id="prev-day" aria-label="Previous day">&larr;</button>
-      <button id="next-day" aria-label="Next day">&rarr;</button>
+    <div class="side-cal card" id="side-cal" aria-label="Calendar"></div>
+    <div class="side-chips">
+      <div class="chip-stat"><svg class="ico"><use href="#i-flame"/></svg><span id="side-streak">—</span></div>
+      <div class="chip-stat"><svg class="ico"><use href="#i-drop"/></svg><span id="side-water">—</span></div>
     </div>
-  </header>
+    <nav class="side-nav" aria-label="Sections">
+      <button data-view="today"><svg class="ico"><use href="#i-today"/></svg>Today</button>
+      <button data-view="coach"><svg class="ico"><use href="#i-coach"/></svg>Coach</button>
+      <button data-view="stats"><svg class="ico"><use href="#i-stats"/></svg>Stats</button>
+      <button data-view="meals"><svg class="ico"><use href="#i-meals"/></svg>Meals</button>
+      <button data-view="you"><svg class="ico"><use href="#i-you"/></svg>You</button>
+    </nav>
+    <button class="theme-toggle" data-theme-toggle aria-label="Switch theme">
+      <svg class="ico sun"><use href="#i-sun"/></svg><svg class="ico moon"><use href="#i-moon"/></svg>
+      <span>Theme</span>
+    </button>
+  </aside>
 
-  <!-- ============================================================ TODAY -->
-  <section id="view-today">
-    <div class="card">
-      <div class="balance">
-        <div>
-          <div class="big" id="net-figure">—</div>
-          <div class="unit" id="net-label">kcal</div>
-        </div>
-        <div class="split">
-          <div>In <b id="kcal-in">0</b></div>
-          <div>Out <b id="kcal-out">0</b></div>
-        </div>
+  <!-- ======================================================== main -->
+  <main class="main">
+    <header class="top">
+      <div>
+        <h1 id="greeting" class="serif">Today</h1>
+        <div class="date" id="date-label"></div>
       </div>
-      <div class="bars" id="bars"></div>
-    </div>
-
-    <div class="card logger">
-      <h2>Log something</h2>
-      <div class="seg" id="kind-seg">
-        <button data-kind="meal" aria-pressed="true">Food</button>
-        <button data-kind="workout" aria-pressed="false">Training</button>
-        <button data-kind="weight" aria-pressed="false">Weight</button>
+      <div class="top-actions">
+        <span class="chip-stat compact only-mobile" id="streak-chip"><svg class="ico"><use href="#i-flame"/></svg><span id="streak-n">—</span></span>
+        <button class="icon-btn only-mobile" id="open-cal" aria-label="Open calendar"><svg class="ico"><use href="#i-cal"/></svg></button>
+        <button class="icon-btn only-mobile theme-toggle" data-theme-toggle aria-label="Switch theme">
+          <svg class="ico sun"><use href="#i-sun"/></svg><svg class="ico moon"><use href="#i-moon"/></svg>
+        </button>
+        <button class="icon-btn" id="prev-day" aria-label="Previous day"><svg class="ico"><use href="#i-chev-l"/></svg></button>
+        <button class="icon-btn" id="next-day" aria-label="Next day"><svg class="ico"><use href="#i-chev-r"/></svg></button>
       </div>
-      <div class="seg" id="slot-seg">
-        <button data-slot="breakfast" aria-pressed="false">Breakfast</button>
-        <button data-slot="lunch" aria-pressed="false">Lunch</button>
-        <button data-slot="dinner" aria-pressed="false">Dinner</button>
-        <button data-slot="snack" aria-pressed="false">Snack</button>
-      </div>
-      <textarea id="entry-text" enterkeyhint="done"
-                placeholder="2 eggs, 3 rashers bacon, wholemeal toast and a black coffee"></textarea>
-      <div class="preview" id="preview"></div>
-      <div class="actions">
-        <button class="btn primary" id="save-entry">Log it</button>
-        <button class="btn ghost" id="clear-entry">Clear</button>
-      </div>
-      <p class="hint" id="logger-hint">Type it how you'd say it. Weights, counts and portions all work
-        &mdash; "200g chicken", "2 slices", "ran 5k in 26 min", "45 min weights", "9000 steps".</p>
-    </div>
+    </header>
 
-    <div class="card">
-      <h2>Today's log</h2>
-      <div id="entries"></div>
-    </div>
-  </section>
+    <div class="strip only-mobile" id="week-strip" aria-label="This week"></div>
 
-  <!-- ============================================================ COACH -->
-  <section id="view-coach" class="hidden">
-    <div class="card">
-      <h2>The verdict</h2>
-      <div class="verdict">
-        <div class="score" id="score">—</div>
-        <div>
-          <div class="label" id="verdict-label">No data</div>
-          <div class="sub" id="verdict-sub"></div>
-        </div>
-      </div>
-      <div class="narrative hidden" id="narrative"></div>
-      <div class="findings" id="findings"></div>
-      <div class="actions">
-        <button class="btn ghost" id="refresh-review">Re-run review</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Last 7 days</h2>
-      <div class="week-grid" id="week-stats"></div>
-      <div class="findings" id="week-findings"></div>
-    </div>
-  </section>
-
-  <!-- ============================================================ MEALS -->
-  <section id="view-meals" class="hidden">
-    <div class="card">
-      <h2>What to eat next</h2>
-      <div class="seg" id="meal-slot-seg">
-        <button data-mealslot="" aria-pressed="true">Any</button>
-        <button data-mealslot="breakfast" aria-pressed="false">Breakfast</button>
-        <button data-mealslot="lunch" aria-pressed="false">Lunch</button>
-        <button data-mealslot="dinner" aria-pressed="false">Dinner</button>
-        <button data-mealslot="snack" aria-pressed="false">Snack</button>
-      </div>
-      <div id="recommendations"></div>
-    </div>
-
-    <div class="card">
-      <h2>What you actually eat</h2>
-      <div class="chips" id="favourites"></div>
-      <p class="hint" id="taste-hint"></p>
-    </div>
-  </section>
-
-  <!-- =========================================================== TRENDS -->
-  <section id="view-trends" class="hidden">
-    <div class="card">
-      <h2>Daily balance &mdash; 30 days</h2>
-      <svg class="sparkline" id="balance-chart" viewBox="0 0 300 96" preserveAspectRatio="none"
-           role="img" aria-label="Daily calorie balance over the last 30 days"></svg>
-      <p class="hint">Bars above the line are surplus days, below are deficit days.</p>
-    </div>
-    <div class="card">
-      <h2>Weight</h2>
-      <svg class="sparkline" id="weight-chart" viewBox="0 0 300 96" preserveAspectRatio="none"
-           role="img" aria-label="Body weight trend"></svg>
-      <p class="hint" id="weight-hint">Log your weight from the Today tab to build this up.</p>
-    </div>
-  </section>
-
-  <!-- ============================================================== YOU -->
-  <section id="view-you" class="hidden">
-    <div class="card">
-      <h2>Your numbers</h2>
-      <form id="profile-form">
-        <div class="field">
-          <label for="p-name">Name</label>
-          <input id="p-name" type="text" autocomplete="name">
-        </div>
-        <div class="grid-2">
-          <div class="field">
-            <label for="p-sex">Sex</label>
-            <select id="p-sex">
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-              <option value="other">Prefer not to say</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="p-age">Age</label>
-            <input id="p-age" type="number" min="13" max="100" inputmode="numeric">
+    <!-- ========================================================= TODAY -->
+    <section id="view-today">
+      <div class="card hero">
+        <div class="hero-ring">
+          <svg viewBox="0 0 120 120" role="img" aria-label="Calories today">
+            <circle class="ring-track" cx="60" cy="60" r="52"/>
+            <circle class="ring-fill" id="ring-fill" cx="60" cy="60" r="52" transform="rotate(-90 60 60)"/>
+          </svg>
+          <div class="ring-centre">
+            <div class="ring-big serif" id="ring-big">—</div>
+            <div class="ring-sub" id="ring-sub">kcal left</div>
           </div>
         </div>
-        <div class="grid-2">
-          <div class="field">
-            <label for="p-height">Height (cm)</label>
-            <input id="p-height" type="number" min="120" max="230" inputmode="numeric">
-          </div>
-          <div class="field">
-            <label for="p-weight">Weight (kg)</label>
-            <input id="p-weight" type="number" min="30" max="400" step="0.1" inputmode="decimal">
-          </div>
+        <div class="hero-side">
+          <div class="hero-stat"><span class="k">In</span><span class="v" id="kcal-in">0</span></div>
+          <div class="hero-stat"><span class="k">Out</span><span class="v" id="kcal-out">0</span></div>
+          <div class="hero-stat"><span class="k" id="net-label">Deficit</span><span class="v" id="net-figure">0</span></div>
         </div>
-        <div class="field">
-          <label for="p-baseline">Daily life, outside training</label>
-          <select id="p-baseline"></select>
-        </div>
-        <div class="grid-2">
-          <div class="field">
-            <label for="p-goal">Goal</label>
-            <select id="p-goal"></select>
-          </div>
-          <div class="field">
-            <label for="p-rate">Rate (kg/week)</label>
-            <input id="p-rate" type="number" min="0" max="1.5" step="0.05" inputmode="decimal">
-          </div>
-        </div>
-        <div class="field">
-          <label for="p-timezone">Timezone</label>
-          <input id="p-timezone" type="text">
-        </div>
-        <button class="btn primary" style="width:100%" type="submit">Save</button>
-      </form>
-      <p class="hint" id="targets-summary"></p>
-    </div>
-    <div class="card">
-      <h2>Session</h2>
-      <button class="btn ghost" id="logout">Sign out</button>
-    </div>
-  </section>
+        <div class="bars" id="bars"></div>
+      </div>
 
-  <nav class="tabs">
-    <button data-view="today" aria-current="true"><span class="ico">&#9679;</span>Today</button>
-    <button data-view="coach" aria-current="false"><span class="ico">&#9998;</span>Coach</button>
-    <button data-view="meals" aria-current="false"><span class="ico">&#9737;</span>Meals</button>
-    <button data-view="trends" aria-current="false"><span class="ico">&#9650;</span>Trends</button>
-    <button data-view="you" aria-current="false"><span class="ico">&#9788;</span>You</button>
-  </nav>
-</main>
+      <div class="card water">
+        <div class="water-head">
+          <h2><svg class="ico"><use href="#i-drop"/></svg> Hydration</h2>
+          <span class="water-label" id="water-label">0 / 0 L</span>
+        </div>
+        <div class="bar-track big"><span class="bar-fill water-fill" id="water-fill"></span></div>
+        <div class="water-actions">
+          <button class="btn small" data-ml="250">+250 ml</button>
+          <button class="btn small" data-ml="500">+500 ml</button>
+          <button class="btn small" data-ml="750">+750 ml</button>
+          <button class="btn small ghost" id="water-undo">Undo</button>
+        </div>
+      </div>
+
+      <div class="card logger">
+        <h2>Log something</h2>
+        <div class="seg" id="kind-seg">
+          <button data-kind="meal" aria-pressed="true">Food</button>
+          <button data-kind="workout" aria-pressed="false">Training</button>
+          <button data-kind="weight" aria-pressed="false">Weight</button>
+        </div>
+        <div class="seg sub" id="slot-seg">
+          <button data-slot="breakfast" aria-pressed="false">Breakfast</button>
+          <button data-slot="lunch" aria-pressed="false">Lunch</button>
+          <button data-slot="dinner" aria-pressed="false">Dinner</button>
+          <button data-slot="snack" aria-pressed="false">Snack</button>
+        </div>
+        <textarea id="entry-text" enterkeyhint="done"
+                  placeholder="2 eggs, 3 rashers bacon, wholemeal toast and a black coffee"></textarea>
+        <div class="preview" id="preview"></div>
+        <div class="actions">
+          <button class="btn primary" id="save-entry">Log it</button>
+          <button class="btn ghost" id="clear-entry">Clear</button>
+        </div>
+        <p class="hint" id="logger-hint">Type it how you'd say it — "200g chicken", "ran 5k in 26 min",
+          "bench 3×8 80kg", "9,000 steps".</p>
+      </div>
+
+      <div class="card">
+        <h2>Today's log</h2>
+        <div id="entries"></div>
+      </div>
+    </section>
+
+    <!-- ========================================================= COACH -->
+    <section id="view-coach" class="hidden">
+      <div class="card">
+        <h2>The verdict</h2>
+        <div class="verdict">
+          <div class="score-ring">
+            <svg viewBox="0 0 90 90"><circle class="ring-track" cx="45" cy="45" r="38"/><circle class="ring-fill" id="score-ring" cx="45" cy="45" r="38" transform="rotate(-90 45 45)"/></svg>
+            <span class="score-n serif" id="score">—</span>
+          </div>
+          <div>
+            <div class="verdict-label serif" id="verdict-label">No data</div>
+            <div class="verdict-sub" id="verdict-sub"></div>
+          </div>
+        </div>
+        <div class="narrative hidden" id="narrative"></div>
+        <div class="findings" id="findings"></div>
+        <div class="actions">
+          <button class="btn ghost" id="refresh-review">Re-run review</button>
+          <button class="btn" id="copy-coach"><svg class="ico"><use href="#i-copy"/></svg> Copy day for coach</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Last 7 days</h2>
+        <div class="stat-grid" id="week-stats"></div>
+        <div class="findings" id="week-findings"></div>
+      </div>
+    </section>
+
+    <!-- ========================================================= STATS -->
+    <section id="view-stats" class="hidden">
+      <div class="card">
+        <div class="stats-head">
+          <div class="seg" id="stats-period">
+            <button data-period="day" aria-pressed="false">Day</button>
+            <button data-period="week" aria-pressed="true">Week</button>
+            <button data-period="month" aria-pressed="false">Month</button>
+          </div>
+          <div class="range-nav">
+            <button class="icon-btn" id="stats-prev" aria-label="Previous period"><svg class="ico"><use href="#i-chev-l"/></svg></button>
+            <span class="range-label" id="stats-range"></span>
+            <button class="icon-btn" id="stats-next" aria-label="Next period"><svg class="ico"><use href="#i-chev-r"/></svg></button>
+          </div>
+        </div>
+        <div id="stats-body"><p class="spinner">Loading…</p></div>
+      </div>
+    </section>
+
+    <!-- ========================================================= MEALS -->
+    <section id="view-meals" class="hidden">
+      <div class="card">
+        <h2>What to eat next</h2>
+        <div class="seg" id="meal-slot-seg">
+          <button data-mealslot="" aria-pressed="true">Any</button>
+          <button data-mealslot="breakfast" aria-pressed="false">Breakfast</button>
+          <button data-mealslot="lunch" aria-pressed="false">Lunch</button>
+          <button data-mealslot="dinner" aria-pressed="false">Dinner</button>
+          <button data-mealslot="snack" aria-pressed="false">Snack</button>
+        </div>
+        <div id="recommendations"></div>
+      </div>
+      <div class="card">
+        <h2>What you actually eat</h2>
+        <div class="chips" id="favourites"></div>
+        <p class="hint" id="taste-hint"></p>
+      </div>
+    </section>
+
+    <!-- =========================================================== YOU -->
+    <section id="view-you" class="hidden">
+      <div class="card">
+        <h2>Your numbers</h2>
+        <form id="profile-form">
+          <div class="field"><label for="p-name">Name</label><input id="p-name" type="text" autocomplete="name"></div>
+          <div class="grid-2">
+            <div class="field"><label for="p-sex">Sex</label>
+              <select id="p-sex"><option value="male">Male</option><option value="female">Female</option><option value="other">Prefer not to say</option></select>
+            </div>
+            <div class="field"><label for="p-age">Age</label><input id="p-age" type="number" min="13" max="100" inputmode="numeric"></div>
+          </div>
+          <div class="grid-2">
+            <div class="field"><label for="p-height">Height (cm)</label><input id="p-height" type="number" min="120" max="230" inputmode="numeric"></div>
+            <div class="field"><label for="p-weight">Weight (kg)</label><input id="p-weight" type="number" min="30" max="400" step="0.1" inputmode="decimal"></div>
+          </div>
+          <div class="field"><label for="p-baseline">Daily life, outside training</label><select id="p-baseline"></select></div>
+          <div class="grid-2">
+            <div class="field"><label for="p-goal">Goal</label><select id="p-goal"></select></div>
+            <div class="field"><label for="p-rate">Rate (kg/week)</label><input id="p-rate" type="number" min="0" max="1.5" step="0.05" inputmode="decimal"></div>
+          </div>
+          <div class="grid-2">
+            <div class="field"><label for="p-climate">Climate</label><select id="p-climate"></select></div>
+            <div class="field"><label for="p-timezone">Timezone</label><input id="p-timezone" type="text"></div>
+          </div>
+          <button class="btn primary" style="width:100%" type="submit">Save</button>
+        </form>
+        <p class="hint" id="targets-summary"></p>
+      </div>
+      <div class="card">
+        <h2>Session</h2>
+        <button class="btn ghost" id="logout">Sign out</button>
+      </div>
+    </section>
+
+    <nav class="tabs only-mobile" aria-label="Sections">
+      <button data-view="today"><svg class="ico"><use href="#i-today"/></svg><span>Today</span></button>
+      <button data-view="coach"><svg class="ico"><use href="#i-coach"/></svg><span>Coach</span></button>
+      <button data-view="stats"><svg class="ico"><use href="#i-stats"/></svg><span>Stats</span></button>
+      <button data-view="meals"><svg class="ico"><use href="#i-meals"/></svg><span>Meals</span></button>
+      <button data-view="you"><svg class="ico"><use href="#i-you"/></svg><span>You</span></button>
+    </nav>
+  </main>
+</div>
+
+<!-- Calendar sheet (mobile) -->
+<div id="cal-sheet" class="sheet hidden" role="dialog" aria-label="Calendar">
+  <div class="sheet-panel">
+    <div class="sheet-head">
+      <h2>Calendar</h2>
+      <button class="icon-btn" id="cal-close" aria-label="Close"><svg class="ico"><use href="#i-x"/></svg></button>
+    </div>
+    <div id="sheet-cal"></div>
+  </div>
+</div>
 
 <script type="module" src="/app.js"></script>
 </body>

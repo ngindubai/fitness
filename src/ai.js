@@ -71,7 +71,10 @@ export async function aiReview({ day, review, profile, ctx }) {
 
   const facts = {
     date: day.date,
+    person: `${profile.age} years old, ${profile.weightKg} kg, ${profile.climate === 'hot' ? 'training in a hot climate' : 'temperate climate'}`,
     goal: day.targets.goal,
+    waterMl: day.waterMl || 0,
+    waterTargetMl: day.targets.waterMl || null,
     caloriesIn: day.caloriesIn,
     caloriesOut: day.caloriesOut,
     calorieTarget: day.targets.calories,

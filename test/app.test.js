@@ -320,3 +320,137 @@ test('a trivial overshoot does not trigger the "ate it back" rebuke', () => {
   assert.ok(day.caloriesIn - day.targets.calories < 250)
   assert.ok(!review.findings.some((f) => f.code === 'ate_back'))
 })
+
+// ------------------------------------------------ strength & environment (v2)
+
+test('parses structured lifts: sets, reps, load, volume', () => {
+  const bench = parseWorkoutPhrase('bench press 3x8 80kg')
+  assert.equal(bench.exercise.id, 'bench')
+  assert.equal(bench.exercise.sets, 3)
+  assert.equal(bench.exercise.reps, 8)
+  assert.equal(bench.exercise.weightKg, 80)
+  assert.equal(bench.exercise.volume, 1920)
+  assert.equal(bench.minutes, 9)
+  assert.ok(bench.tags.includes('strength'))
+
+  const squat = parseWorkoutPhrase('squat 5 sets of 5 at 140')
+  assert.equal(squat.exercise.id, 'squat')
+  assert.equal(squat.exercise.volume, 3500)
+
+  const pullups = parseWorkoutPhrase('pull ups 4x8')
+  assert.equal(pullups.exercise.id, 'pull_up')
+  assert.equal(pullups.exercise.volume, null)   // bodyweight - no tonnage claim
+  assert.equal(pullups.recognised, true)
+})
+
+test('interval notation is not mistaken for lifting', () => {
+  // 5x400m sprints: reps 400 exceeds the cap, so this stays cardio.
+  const intervals = parseWorkoutPhrase('ran 5x400m intervals in 12 mins')
+  assert.ok(!intervals.exercise, 'should not be parsed as a lift')
+})
+
+test('a whole gym session parses line by line', () => {
+  const items = parseWorkout('bench 3x8 80kg, incline bench 3x10 60kg, lat pulldown 4x12 70kg then 15 min treadmill')
+  const lifts = items.filter((i) => i.exercise)
+  assert.equal(lifts.length, 3)
+  assert.equal(lifts[1].exercise.id, 'incline_bench')
+  const cardio = items.find((i) => i.activityId === 'treadmill')
+  assert.ok(cardio)
+  assert.equal(cardio.outdoor, false)
+})
+
+test('outdoor detection: street yes, treadmill and gym no', () => {
+  assert.equal(parseWorkoutPhrase('ran 5k in 30 min').outdoor, true)
+  assert.equal(parseWorkoutPhrase('30 min treadmill run').outdoor, false)
+  assert.equal(parseWorkoutPhrase('8000 steps').outdoor, true)
+  assert.equal(parseWorkoutPhrase('8000 steps on the treadmill').outdoor, false)
+})
+
+test('hot climate raises outdoor burn by 8%, indoor untouched', async () => {
+  const { climateAdjustedKcal, HEAT_MULTIPLIER } = await import('../src/engine.js')
+  const hot = { ...PROFILE, climate: 'hot' }
+  const temperate = { ...PROFILE, climate: 'temperate' }
+
+  assert.equal(climateAdjustedKcal(400, { outdoor: true }, hot), Math.round(400 * HEAT_MULTIPLIER))
+  assert.equal(climateAdjustedKcal(400, { outdoor: false }, hot), 400)
+  assert.equal(climateAdjustedKcal(400, { outdoor: true }, temperate), 400)
+})
+
+test('water target scales with weight, climate and training', async () => {
+  const { waterTargetMl } = await import('../src/engine.js')
+  const gareth = { weightKg: 115, climate: 'hot' }
+
+  const rest = waterTargetMl(gareth, 0)
+  assert.equal(rest, 4500)                       // 115*35 + 500 = 4525, to nearest 250
+  assert.ok(waterTargetMl(gareth, 60) > rest)    // training adds
+  assert.ok(waterTargetMl({ weightKg: 115, climate: 'temperate' }, 0) < rest)
+})
+
+test('buildDay carries water and the day target', () => {
+  const day = buildDay({
+    profile: { ...PROFILE, weightKg: 115, climate: 'hot' },
+    date: '2026-08-06',
+    meals: [],
+    workouts: [],
+    waters: [{ value: 500 }, { value: 750 }],
+  })
+  assert.equal(day.waterMl, 1250)
+  assert.equal(day.targets.waterMl, 4500)
+})
+
+test('summarisePeriod aggregates volume, streaks and weight change', async () => {
+  const { summarisePeriod } = await import('../src/engine.js')
+  const liftDay = (date) => buildDay({
+    profile: PROFILE, date,
+    meals: [{ date, items: [{ foodId: 'x', name: 'F', kcal: 2000, protein: 180, carbs: 180, fat: 60, fibre: 30, sugar: 20, grams: 1200, recognised: true, tags: [] }] }],
+    workouts: [{ date, items: parseWorkout('bench 3x8 80kg, squat 3x5 120kg').map((i) => ({ ...i, kcal: 200 })) }],
+  })
+  const emptyDay = (date) => buildDay({ profile: PROFILE, date, meals: [], workouts: [] })
+
+  const days = [liftDay('2026-08-01'), liftDay('2026-08-02'), emptyDay('2026-08-03'), liftDay('2026-08-04')]
+  const summary = summarisePeriod(days, [
+    { date: '2026-08-01', value: 116.2 }, { date: '2026-08-04', value: 115.4 },
+  ])
+
+  assert.equal(summary.loggedDays, 3)
+  assert.equal(summary.totalVolumeKg, (1920 + 1800) * 3)
+  assert.ok(summary.volumeByGroup.push > 0 && summary.volumeByGroup.legs > 0)
+  assert.equal(summary.bestStreak, 2)
+  assert.equal(summary.weightChange, -0.8)
+})
+
+test('the coach notices heat and thin hydration', () => {
+  const hotProfile = { ...PROFILE, weightKg: 115, climate: 'hot' }
+  const meals = [{ date: '2026-08-06', items: [
+    { foodId: 'x', name: 'Food', kcal: 2000, protein: 200, carbs: 150, fat: 60, fibre: 30, sugar: 20, grams: 1200, recognised: true, tags: [] },
+  ] }]
+  const workouts = [{ date: '2026-08-06', items: [
+    { activityId: 'walk_brisk', name: 'Walk', minutes: 60, met: 4.8, kcal: 380, tags: ['cardio'], outdoor: true, recognised: true },
+  ] }]
+  const day = buildDay({ profile: hotProfile, date: '2026-08-06', meals, workouts, waters: [{ value: 1000 }] })
+  const review = reviewDay(day, hotProfile, [])
+
+  assert.ok(review.findings.some((f) => f.code === 'heat'))
+  assert.ok(review.findings.some((f) => f.code === 'water_low'), 'a litre against 4.5L should be called out')
+})
+
+test('exercise ids are unique and defaults now match the owner', async () => {
+  const { EXERCISES } = await import('../src/data/exercises.js')
+  assert.equal(new Set(EXERCISES.map((e) => e.id)).size, EXERCISES.length)
+
+  assert.equal(DEFAULT_PROFILE.age, 37)
+  assert.equal(DEFAULT_PROFILE.weightKg, 115)
+  assert.equal(DEFAULT_PROFILE.timezone, 'Asia/Dubai')
+  assert.equal(DEFAULT_PROFILE.climate, 'hot')
+})
+
+test('protein scales to adjusted body weight above BMI 30', () => {
+  // 115 kg at 178 cm is BMI ~36. Ideal = 25 x 1.78^2 = 79.2 kg;
+  // adjusted = 79.2 + 0.4 x 35.8 = 93.5 kg; at 2.0 g/kg -> 187 g.
+  const heavy = targetsFor({ ...PROFILE, weightKg: 115, heightCm: 178, goal: 'lose' }, 0)
+  assert.ok(heavy.protein >= 180 && heavy.protein <= 192, `got ${heavy.protein}`)
+
+  // Under BMI 30 nothing changes: 90 kg at 180 cm is BMI 27.8.
+  const lean = targetsFor({ ...PROFILE, weightKg: 90, heightCm: 180, goal: 'lose' }, 0)
+  assert.equal(lean.protein, 180)
+})

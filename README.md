@@ -9,6 +9,20 @@ of the day it tells you — bluntly — whether the day moved you forward or not
   "ran 5k in 26 min", "9,000 steps". Everything is parsed into weighed food
   items and MET-based energy costs, and the portion it assumed is shown so you
   can correct it in one tap.
+- **Structured lifting.** "bench 3x8 80kg, lat pulldown 4x12 70kg" parses into
+  exercises with sets, reps, load and session tonnage, tracked weekly by
+  movement pattern (push / pull / legs / core).
+- **Knows your environment.** Outdoor training in a hot climate carries a
+  modest heat uplift on the burn estimate, and the hydration target scales
+  with body weight, climate and training load. Protein targets use adjusted
+  body weight above BMI 30, so they are demanding but achievable.
+- **Calendar, and daily / weekly / monthly summaries.** A month calendar sits
+  in the sidebar (or a sheet on the phone), every day is one tap away, and the
+  Stats tab rolls the log up by day, week or calendar month - including a
+  deficit/surplus heatmap and the weight trend.
+- **Dark and light themes**, styled like something you would pay for.
+- **One-tap "Copy day for coach"** produces a compact text summary of the day
+  to paste at a human (or AI) coach.
 - **An honest daily review.** A score out of 100 and a set of findings ordered
   by how much they cost you. It calls out surpluses, low protein, alcohol, junk
   share, missed training, and days where you clearly stopped logging halfway.
@@ -95,7 +109,7 @@ APP_PASSCODE=letmein npm start
 Local data goes to `data/fitness.json`.
 
 ```bash
-npm test        # 29 tests over the parser, energy maths, coach and recommender
+npm test        # 50 tests over the parser, energy maths, coach and recommender
 ```
 
 ## Self-hosting (VPS, home server, anything that runs Node)

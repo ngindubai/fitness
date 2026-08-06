@@ -6,7 +6,7 @@
  * calorie total is worse than an error message.
  */
 
-const CACHE = 'fitness-shell-v1'
+const CACHE = 'fitness-shell-v2'
 const SHELL = ['/', '/index.html', '/app.js', '/styles.css', '/icon.svg', '/manifest.webmanifest']
 
 self.addEventListener('install', (event) => {

@@ -8,6 +8,7 @@
 
 import { ALIAS_INDEX, FOODS_BY_ID } from './data/foods.js'
 import { ACTIVITY_ALIAS_INDEX, ACTIVITIES_BY_ID, metForSpeed } from './data/activities.js'
+import { EXERCISE_ALIAS_INDEX } from './data/exercises.js'
 
 // ---------------------------------------------------------------- utilities
 
@@ -352,6 +353,125 @@ function extractSteps(text) {
   return { steps: parseInt(m[1].replace(/,/g, ''), 10), matched: m[0] }
 }
 
+/**
+ * Set/rep notation: "3x8", "3 × 8", "5 sets of 5", "4 sets x 10 reps".
+ * Reps capped at 100 so interval notation like "5x400m" never reads as a lift.
+ */
+function extractSetsReps(text) {
+  const x = text.match(/\b(\d{1,2})\s*(?:x|×)\s*(\d{1,3})\b/)
+  if (x && Number(x[2]) <= 100) {
+    return { sets: Number(x[1]), reps: Number(x[2]), matched: x[0] }
+  }
+  const worded = text.match(/\b(\d{1,2})\s*sets?\s*(?:of|x|×)?\s*(\d{1,3})\s*(?:reps?)?\b/)
+  if (worded && Number(worded[2]) <= 100) {
+    return { sets: Number(worded[1]), reps: Number(worded[2]), matched: worded[0] }
+  }
+  return null
+}
+
+/**
+ * The load on the bar: "80kg", "@ 80", "at 140", "185 lbs".
+ * The "at" alternative needs its own word boundary, or it eats the trailing
+ * "at" of "squat" and leaves "squ" behind for the exercise matcher.
+ */
+function extractLoad(text) {
+  const kg = text.match(/(?:@\s*|\bat\s+)?(\d+(?:\.\d+)?)\s*(?:kg|kilos?|kgs)\b/)
+  if (kg) return { kg: parseFloat(kg[1]), matched: kg[0] }
+  const lb = text.match(/(?:@\s*|\bat\s+)?(\d+(?:\.\d+)?)\s*(?:lb|lbs|pounds?)\b/)
+  if (lb) return { kg: Math.round(parseFloat(lb[1]) * 0.4536 * 10) / 10, matched: lb[0] }
+  const bare = text.match(/(?:@|\bat)\s+(\d+(?:\.\d+)?)\b/)
+  if (bare) return { kg: parseFloat(bare[1]), matched: bare[0] }
+  return null
+}
+
+function matchExercise(phrase) {
+  let best = null
+  for (const { term, exercise } of EXERCISE_ALIAS_INDEX) {
+    const score = scoreMatch(phrase, term)
+    if (score > 0 && (!best || score > best.score)) {
+      best = { exercise, score }
+      if (score === 1) break
+    }
+  }
+  return best && best.score >= 0.5 ? best : null
+}
+
+/**
+ * Roughly three minutes per working set including rest — the standard
+ * assumption for hypertrophy-range training. Energy is time x MET; the tonnage
+ * (sets x reps x load) is tracked because progressive overload, not calories,
+ * is what strength work is for.
+ */
+const MINUTES_PER_SET = 3
+const LIFTING_MET = 5.0
+
+/**
+ * A lift with structure: "bench 3x8 80kg" -> the exercise, its volume, and an
+ * estimated time cost. Returns null when the phrase is not set/rep shaped.
+ * @returns {import('./parse.js').ParsedWorkoutItem | null}
+ */
+function parseStrengthPhrase(raw, working) {
+  const setsReps = extractSetsReps(working)
+  let remainder = setsReps ? working.replace(setsReps.matched, ' ') : working
+  const load = extractLoad(remainder)
+  if (load) remainder = remainder.replace(load.matched, ' ')
+
+  const matched = matchExercise(remainder)
+  // Without set/rep notation this is not a structured lift — let the ordinary
+  // activity path handle "30 min weights". But a bare known lift name with a
+  // load ("deadlifts at 140") still counts.
+  if (!setsReps && !(matched && load)) return null
+  if (!matched && !setsReps) return null
+
+  const sets = setsReps?.sets ?? 3
+  const reps = setsReps?.reps ?? null
+  const minutes = Math.max(MINUTES_PER_SET, sets * MINUTES_PER_SET)
+  const volume = load && reps ? Math.round(sets * reps * load.kg) : null
+
+  const name = matched ? matched.exercise.name : 'Weights'
+  const detail = [
+    setsReps ? `${sets}×${reps}` : null,
+    load ? `@ ${load.kg} kg` : null,
+  ].filter(Boolean).join(' ')
+
+  return {
+    raw,
+    activityId: matched ? `ex_${matched.exercise.id}` : 'weights_light',
+    name: detail ? `${name} ${detail}` : name,
+    minutes,
+    distanceKm: null,
+    met: LIFTING_MET,
+    tags: ['strength'],
+    recognised: true,
+    exercise: {
+      id: matched?.exercise.id ?? null,
+      name,
+      group: matched?.exercise.group ?? 'full',
+      sets,
+      reps,
+      weightKg: load?.kg ?? null,
+      volume,
+    },
+  }
+}
+
+/**
+ * Outdoor cardio matters in a hot climate: the engine applies a heat
+ * adjustment to it. Anything on a machine or explicitly indoors is exempt.
+ */
+const OUTDOOR_IDS = new Set([
+  'walk_slow', 'walk_moderate', 'walk_brisk', 'walk_very_brisk', 'hiking',
+  'jog', 'run_5mph', 'run_6mph', 'run_7mph', 'run_8mph', 'run_9mph', 'run_10mph',
+  'trail_run', 'parkrun', 'marathon',
+  'cycle_leisure', 'cycle_light', 'cycle_moderate', 'cycle_vigorous', 'cycle_racing', 'mtb',
+  'golf', 'football', 'football_comp',
+])
+
+function isOutdoor(activityId, raw) {
+  if (!OUTDOOR_IDS.has(activityId)) return false
+  return !/treadmill|indoor|inside|gym|machine/.test(raw)
+}
+
 function matchActivity(phrase) {
   const cleaned = normalise(phrase)
   let best = null
@@ -387,6 +507,11 @@ export function parseWorkoutPhrase(phrase, weightKg = 80) {
   const raw = String(phrase).trim()
   let working = normalise(raw)
 
+  // Set/rep notation means a structured lift, which the generic activity
+  // matcher would either miss entirely or flatten into "weights, 45 min".
+  const lift = parseStrengthPhrase(raw, working)
+  if (lift) return lift
+
   const steps = extractSteps(working)
   if (steps) {
     // Roughly 0.762 m per step, at an everyday walking cadence of ~100 spm.
@@ -400,6 +525,9 @@ export function parseWorkoutPhrase(phrase, weightKg = 80) {
       distanceKm: round(km),
       met: metForSpeed('walk', (km / (minutes / 60)) * 0.621371),
       tags: ['cardio', 'neat'],
+      // Steps are assumed outdoor unless said otherwise - that is what a step
+      // count usually is, and in a hot climate the difference matters.
+      outdoor: !/treadmill|indoor|inside|mall/.test(working),
       recognised: true,
     }
   }
@@ -467,6 +595,7 @@ export function parseWorkoutPhrase(phrase, weightKg = 80) {
     distanceKm: distance ? round(distance.km, 2) : null,
     met: round(met, 1),
     tags: activity.tags,
+    outdoor: isOutdoor(activity.id, working),
     recognised: true,
   }
 }

@@ -260,6 +260,38 @@ export function reviewDay(day, profile, recentDays = []) {
     )
   }
 
+  // ------------------------------------------------------- heat & hydration
+  if (profile.climate === 'hot' && training.outdoorMinutes > 0) {
+    findings.push(
+      finding('note', 'heat',
+        `${training.outdoorMinutes} min of that was outdoors in serious heat, so the burn ` +
+        `estimate carries a modest heat uplift. The bigger cost of heat is fluid, not calories.`)
+    )
+  }
+
+  const waterTarget = targets.waterMl || 0
+  if (waterTarget > 0) {
+    if (day.waterMl > 0 && day.waterMl < waterTarget * 0.5) {
+      findings.push(
+        finding('warn', 'water_low',
+          `${(day.waterMl / 1000).toFixed(1)} L of water against a ~${(waterTarget / 1000).toFixed(1)} L day. ` +
+          `At your size${profile.climate === 'hot' ? ' in this climate' : ''}, that is not close. ` +
+          `Dehydration reads as hunger and fatigue - both of which you will then eat.`)
+      )
+    } else if (day.waterMl >= waterTarget * 0.9) {
+      findings.push(
+        finding('good', 'water_ok',
+          `${(day.waterMl / 1000).toFixed(1)} L of water - target met. Unglamorous and important.`)
+      )
+    } else if (day.waterMl === 0 && training.minutes > 0 && profile.climate === 'hot') {
+      findings.push(
+        finding('note', 'water_untracked',
+          `You trained in a hot climate and logged no water. If you drank, tap it in - ` +
+          `hydration is the one estimate here that costs nothing to get right.`)
+      )
+    }
+  }
+
   // ------------------------------------------------------------------ alcohol
   if (day.alcoholKcal > 0) {
     const share = Math.round((day.alcoholKcal / day.caloriesIn) * 100)
@@ -447,6 +479,15 @@ export function reviewWeek(week, profile, days = []) {
       finding('bad', 'week_strength',
         `${week.strengthDays} resistance session${week.strengthDays === 1 ? '' : 's'} this week. ` +
         `Two is the floor if you want to keep the muscle you have.`)
+    )
+  }
+
+  const totalVolume = days.reduce((sum, d) => sum + (d.training?.volumeKg || 0), 0)
+  if (totalVolume > 0) {
+    findings.push(
+      finding('good', 'week_volume',
+        `${totalVolume.toLocaleString('en-GB')} kg moved under the bar this week. Volume is the ` +
+        `number to push up slowly - same lifts, a little more each week.`)
     )
   }
 

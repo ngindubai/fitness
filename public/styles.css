@@ -779,3 +779,130 @@ nav.tabs button[aria-current='true'] { color: var(--accent); font-weight: 600; }
 .ing-name { font-size: 0.88rem; min-width: 0; }
 .ing-row .btn { flex: none; }
 #ing-results { max-height: 420px; overflow-y: auto; }
+
+/* -------------------------------------------------- movement animations */
+
+.fig { display: block; width: 100%; max-width: 380px; margin: 0 auto; }
+.fig .fig-ground { stroke: var(--border-strong); stroke-linecap: round; }
+.fig .fig-kit { fill: var(--surface-3); stroke: var(--border-strong); stroke-width: 1.2; }
+.fig .fig-kit-line { stroke: var(--border-strong); stroke-linecap: round; }
+.fig .fig-bone { stroke: var(--text); stroke-width: 6.5; stroke-linecap: round; }
+.fig .fig-bone.arm { stroke-width: 5.5; }
+.fig .fig-torso { stroke: var(--text); stroke-width: 8.5; stroke-linecap: round; }
+.fig .fig-foot { stroke: var(--text); stroke-width: 5; stroke-linecap: round; }
+.fig .fig-head { fill: var(--text); }
+.fig .fig-joint { fill: var(--surface); opacity: 0.9; }
+.fig .fig-far { opacity: 0.32; }
+.fig .fig-wt rect { fill: var(--accent); }
+.fig .fig-bar { stroke: var(--accent); stroke-linecap: round; }
+.fig .fig-cable { stroke: var(--faint); stroke-dasharray: 3 3; }
+.fig .fig-band { stroke: var(--accent); stroke-linecap: round; opacity: 0.85; }
+.fig .fig-glow { fill: var(--accent); filter: blur(6px); }
+.fig .fig-glow-ring { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+.fig.bad .fig-bone, .fig.bad .fig-torso, .fig.bad .fig-foot { stroke: var(--bad); }
+.fig.bad .fig-head { fill: var(--bad); }
+.fig.paused { opacity: 0.75; }
+
+.fig-caption {
+  text-align: center;
+  color: var(--accent);
+  font-size: 0.82rem;
+  min-height: 22px;
+  margin-top: 2px;
+  transition: color 0.3s;
+}
+.fig-caption.bad { color: var(--bad); }
+
+/* ---------------------------------------------------- movement guide UI */
+
+.move-panel {
+  max-height: 88dvh;
+  overflow-y: auto;
+  max-width: 560px;
+  width: 100%;
+  margin: 0 auto;
+}
+.sheet-head h2#move-name {
+  text-transform: none;
+  letter-spacing: 0.01em;
+  font-family: var(--serif);
+  font-size: 1.35rem;
+  color: var(--text);
+}
+.move-muscles {
+  color: var(--accent);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-top: 3px;
+}
+.move-anim {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  padding: 10px 8px 8px;
+  margin: 8px 0 14px;
+}
+#move-body h3 {
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 16px 0 6px;
+}
+.move-text { color: var(--text); font-size: 0.88rem; margin: 0; }
+.move-list { margin: 0; padding-left: 20px; }
+.move-list li { font-size: 0.88rem; padding: 3px 0; }
+.move-list.wrong li { color: var(--muted); }
+.move-list.wrong li::marker { color: var(--bad); }
+.move-feel {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-s);
+  padding: 10px 13px;
+  font-size: 0.84rem;
+}
+.move-feel b { color: var(--accent); }
+.move-cue {
+  margin-top: 16px;
+  padding: 11px 14px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface-2);
+  border-radius: 0 var(--radius-s) var(--radius-s) 0;
+  font-family: var(--serif);
+  font-size: 0.98rem;
+}
+
+.has-guide { cursor: pointer; }
+.plan-ex li.has-guide span:first-child::after,
+.plan-session li.has-guide::after {
+  content: '▸';
+  color: var(--accent);
+  font-size: 0.7em;
+  margin-left: 6px;
+}
+.plan-ex li.has-guide:hover span:first-child,
+.plan-session li.has-guide:hover,
+.plan-title.has-guide:hover { color: var(--accent); }
+
+.move-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
+}
+.move-tile {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  padding: 8px 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  transition: border-color 0.2s, transform 0.15s;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+.move-tile:hover { border-color: var(--accent); color: var(--text); transform: translateY(-1px); }
+.move-tile .move-thumb { width: 100%; }
+.move-tile .fig { max-width: 130px; }

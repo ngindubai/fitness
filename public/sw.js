@@ -6,8 +6,8 @@
  * calorie total is worse than an error message.
  */
 
-const CACHE = 'fitness-shell-v4'
-const SHELL = ['/', '/index.html', '/app.js', '/styles.css', '/icon.svg', '/manifest.webmanifest']
+const CACHE = 'fitness-shell-v5'
+const SHELL = ['/', '/index.html', '/app.js', '/movements.js', '/anim.js', '/styles.css', '/icon.svg', '/manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()))

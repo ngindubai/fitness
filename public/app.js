@@ -3,6 +3,9 @@
  * runs in the browser.
  */
 
+import { findMovement } from './movements.js'
+import { mountAnimation } from './anim.js'
+
 const $ = (id) => document.getElementById(id)
 
 const state = {
@@ -601,6 +604,13 @@ function renderPlanBlock(block) {
     ${block.exercises ? `<ul class="plan-ex">${block.exercises.map((e) => `
       <li><span>${escapeHtml(e.name)}</span><span class="plan-ex-spec">${e.sets} × ${escapeHtml(String(e.reps))}</span>${e.note ? `<span class="plan-ex-note">${escapeHtml(e.note)}</span>` : ''}</li>`).join('')}</ul>` : ''}`
 
+  // Any exercise or cardio line with a movement guide opens it on tap.
+  if (block.exercises) {
+    left.querySelectorAll('.plan-ex li').forEach((li, index) => attachGuide(li, block.exercises[index].name))
+  } else if (block.kind === 'workout' && block.key !== 'steps') {
+    attachGuide(left.querySelector('.plan-title'), block.title)
+  }
+
   const action = document.createElement('button')
   action.className = `btn small plan-confirm${block.entryId ? ' confirmed' : ''}`
   action.innerHTML = block.entryId
@@ -634,6 +644,57 @@ function renderPlanBlock(block) {
   wrap.appendChild(left)
   wrap.appendChild(action)
   return wrap
+}
+
+// --------------------------------------------------------- movement guide
+
+let moveAnim = null
+
+function openMovement(movement) {
+  if (!movement) return
+  $('move-name').textContent = movement.name
+  $('move-muscles').textContent = movement.muscles
+
+  moveAnim?.destroy()
+  $('move-anim').innerHTML = ''
+  moveAnim = mountAnimation($('move-anim'), { ...movement.anim, name: movement.name })
+
+  $('move-body').innerHTML = `
+    <div class="move-feel"><b>Where you should feel it.</b> ${escapeHtml(movement.feel)}</div>
+    <h3>Set up</h3>
+    <p class="move-text">${escapeHtml(movement.setup)}</p>
+    <h3>How to do it</h3>
+    <ol class="move-list">${movement.steps.map((s) => `<li>${escapeHtml(s)}</li>`).join('')}</ol>
+    <h3>Where it goes wrong</h3>
+    <ul class="move-list wrong">${movement.wrong.map((w) => `<li>${escapeHtml(w)}</li>`).join('')}</ul>
+    <div class="move-cue">${escapeHtml(movement.cue)}</div>`
+
+  $('move-sheet').classList.remove('hidden')
+  document.querySelector('.move-panel').scrollTop = 0
+}
+
+function closeMovement() {
+  moveAnim?.destroy()
+  moveAnim = null
+  $('move-sheet').classList.add('hidden')
+}
+
+$('move-close').addEventListener('click', closeMovement)
+$('move-sheet').addEventListener('click', (event) => {
+  if (event.target === $('move-sheet')) closeMovement()
+})
+
+/** Make an element open the guide for `name` when a guide exists for it. */
+function attachGuide(element, name) {
+  const movement = findMovement(name)
+  if (!movement) return false
+  element.classList.add('has-guide')
+  element.setAttribute('role', 'button')
+  element.setAttribute('tabindex', '0')
+  const open = () => openMovement(movement)
+  element.addEventListener('click', open)
+  element.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open() } })
+  return true
 }
 
 async function loadPlanOverview() {
@@ -700,6 +761,12 @@ function renderPlanOverview(container, { plan, startDate, endDate, currentWeek }
       ${startDate ? `<p class="plan-detail faint">${fmtDate(startDate, { day: 'numeric', month: 'long', year: 'numeric' })} → ${fmtDate(endDate, { day: 'numeric', month: 'long', year: 'numeric' })}${currentWeek ? ` · week ${currentWeek} of ${plan.weeks}` : ''} · deloads on weeks ${plan.deloadWeeks.join(', ')} · test week ${plan.testWeek}</p>` : ''}
     </div>
     ${phaseCards}
+    <div class="card" id="movement-guide-card">
+      <h2>The movements</h2>
+      <p class="hint">Tap any movement for the animated form guide — here, in the sessions above,
+        or on the Today card. Watch it a few times before your first set.</p>
+      <div class="move-grid" id="move-grid"></div>
+    </div>
     <div class="card">
       <h2>The meal bank</h2>
       <p class="hint">Each day the plan deals you one from each column — swap within a column freely, the numbers stay honest.</p>
@@ -709,6 +776,43 @@ function renderPlanOverview(container, { plan, startDate, endDate, currentWeek }
       <h2>House rules</h2>
       ${plan.rules.map((r) => `<div class="finding note">${escapeHtml(r)}</div>`).join('')}
     </div>`
+
+  // Every exercise line in the phase cards opens its movement guide.
+  container.querySelectorAll('.plan-phase .plan-session li').forEach((li) => attachGuide(li, li.textContent))
+
+  // Thumbnail grid of every distinct movement this plan uses.
+  const seen = new Map()
+  for (const phase of plan.phases) {
+    for (const session of phase.sessions) {
+      for (const exercise of session.exercises) {
+        const movement = findMovement(exercise.name)
+        if (movement) seen.set(movement.id, movement)
+      }
+    }
+    for (const c of phase.cardio) {
+      const movement = findMovement(c.title)
+      if (movement) seen.set(movement.id, movement)
+    }
+    if (phase.restCardio) {
+      const movement = findMovement(phase.restCardio.title)
+      if (movement) seen.set(movement.id, movement)
+    }
+  }
+  const grid = container.querySelector('#move-grid')
+  for (const movement of seen.values()) {
+    const tile = document.createElement('button')
+    tile.className = 'move-tile'
+    tile.type = 'button'
+    const thumb = document.createElement('div')
+    thumb.className = 'move-thumb'
+    mountAnimation(thumb, { ...movement.anim, name: movement.name, thumb: movement.anim.poses.length - 1 }, { static: true })
+    tile.appendChild(thumb)
+    const label = document.createElement('span')
+    label.textContent = movement.name
+    tile.appendChild(label)
+    tile.addEventListener('click', () => openMovement(movement))
+    grid.appendChild(tile)
+  }
 }
 
 function renderBars(day) {

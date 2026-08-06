@@ -3,10 +3,34 @@
  * runs in the browser.
  */
 
-import { findMovement } from './movements.js'
-import { mountAnimation } from './anim.js'
+/**
+ * The movement guide is an enhancement, not a dependency: if its modules
+ * fail to load (flaky network, mid-deploy cache), the core app still boots.
+ */
+let findMovement = () => null
+let mountAnimation = null
+const guideReady = Promise.all([import('./movements.js'), import('./anim.js')])
+  .then(([movements, anim]) => {
+    findMovement = movements.findMovement
+    mountAnimation = anim.mountAnimation
+  })
+  .catch(() => {})
 
-const $ = (id) => document.getElementById(id)
+/**
+ * A missing element must never crash the boot script — a service worker can
+ * briefly pair an older index.html with newer code during a deploy, and one
+ * null.addEventListener at the top level used to mean a blank white page.
+ */
+const missingWarned = new Set()
+function $(id) {
+  const el = document.getElementById(id)
+  if (el) return el
+  if (!missingWarned.has(id)) {
+    missingWarned.add(id)
+    console.warn(`Element #${id} is missing from this page version — its feature is disabled.`)
+  }
+  return document.createElement('input')
+}
 
 const state = {
   token: localStorage.getItem('ff_token') || null,
@@ -651,7 +675,7 @@ function renderPlanBlock(block) {
 let moveAnim = null
 
 function openMovement(movement) {
-  if (!movement) return
+  if (!movement || !mountAnimation) return
   $('move-name').textContent = movement.name
   $('move-muscles').textContent = movement.muscles
 
@@ -700,6 +724,7 @@ function attachGuide(element, name) {
 async function loadPlanOverview() {
   const container = $('plan-overview')
   container.innerHTML = '<p class="spinner">Loading…</p>'
+  await guideReady
   try {
     if (!state.profile?.planId) {
       container.innerHTML = `<div class="card"><h2>No plan attached</h2>
@@ -799,6 +824,10 @@ function renderPlanOverview(container, { plan, startDate, endDate, currentWeek }
     }
   }
   const grid = container.querySelector('#move-grid')
+  if (!mountAnimation) {
+    container.querySelector('#movement-guide-card')?.classList.add('hidden')
+    return
+  }
   for (const movement of seen.values()) {
     const tile = document.createElement('button')
     tile.className = 'move-tile'

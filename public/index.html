@@ -16,6 +16,40 @@
 (function () {
   var t = localStorage.getItem('ff_theme')
   if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t
+})();
+
+/*
+ * Never-white-screen guard. Every section starts hidden until the app boots,
+ * so if the script fails to load or throws, the page would be blank. This
+ * watchdog reveals the login screen and prints the actual error, which turns
+ * an undebuggable blank page into a readable one.
+ */
+(function () {
+  var shown = false
+  function reveal(message) {
+    if (shown) return
+    var app = document.getElementById('app')
+    var login = document.getElementById('login')
+    if (app && !app.classList.contains('hidden')) return // app is up; all fine
+    shown = true
+    if (login) login.classList.remove('hidden')
+    if (message) {
+      var box = document.createElement('div')
+      box.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:999;' +
+        'background:#2a1414;color:#f0b9b0;border:1px solid #a04030;border-radius:12px;' +
+        'padding:12px 14px;font:13px/1.45 -apple-system,sans-serif;word-break:break-word'
+      box.textContent = 'The app hit an error while loading — try a refresh. Details: ' + message
+      document.body.appendChild(box)
+    }
+  }
+  window.addEventListener('error', function (event) {
+    reveal(String((event.error && event.error.message) || event.message || 'script error'))
+  })
+  window.addEventListener('unhandledrejection', function (event) {
+    reveal(String((event.reason && event.reason.message) || event.reason || 'load failure'))
+  })
+  setTimeout(function () { reveal('') }, 7000)
+  window.__ffGuardOff = function () { shown = true }
 })()
 </script>
 <link rel="stylesheet" href="/styles.css">

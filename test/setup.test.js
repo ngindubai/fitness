@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { findDatabaseId, applyDatabaseId } from '../scripts/setup.mjs'
+import { findDatabaseId, applyDatabaseId, isValidDatabaseName } from '../scripts/setup-lib.mjs'
 
 // The network call cannot be tested without a Cloudflare account; the parsing
 // and file rewriting can, and those are where this script would actually break.
@@ -64,4 +64,36 @@ test('the real wrangler.toml has a database_id line this can patch', async () =>
   const toml = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8')
   const updated = applyDatabaseId(toml, 'test-id')
   assert.match(updated, /database_id = "test-id"/)
+})
+
+// --------------------------------------- Windows regressions (v1 shipped broken)
+
+test('setup.mjs runs its main routine unconditionally', async () => {
+  const { readFileSync } = await import('node:fs')
+  const source = readFileSync(new URL('../scripts/setup.mjs', import.meta.url), 'utf8')
+
+  // v1 guarded main with `import.meta.url === \`file://${process.argv[1]}\``,
+  // which is always false on Windows (backslashes, and file:/// vs file://).
+  // The script exited 0 having done nothing. No guard means no such failure.
+  assert.ok(
+    !/import\.meta\.url\s*===/.test(source),
+    'setup.mjs must not gate its main routine on an import.meta.url comparison'
+  )
+})
+
+test('setup.mjs spawns wrangler without needing a shell', async () => {
+  const { readFileSync } = await import('node:fs')
+  const source = readFileSync(new URL('../scripts/setup.mjs', import.meta.url), 'utf8')
+
+  // execFileSync('npx', ...) cannot find npx on Windows, where it is npx.cmd.
+  assert.ok(!/execFileSync\(\s*['"]npx['"]/.test(source), 'must not spawn npx directly')
+  assert.ok(/execFileSync\(\s*process\.execPath/.test(source), 'should run wrangler via the node binary')
+})
+
+test('rejects a database name that could not be passed safely as an argument', () => {
+  assert.ok(isValidDatabaseName('fitness'))
+  assert.ok(isValidDatabaseName('my-db_2'))
+  assert.ok(!isValidDatabaseName('fitness; rm -rf /'))
+  assert.ok(!isValidDatabaseName('--flag'.repeat(20)))
+  assert.ok(!isValidDatabaseName(''))
 })

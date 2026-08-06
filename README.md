@@ -41,29 +41,20 @@ You need a free [Cloudflare account](https://dash.cloudflare.com/sign-up).
 ```bash
 npm install
 
-# 1. Sign in to Cloudflare
-npx wrangler login
-
-# 2. Create the database
-npx wrangler d1 create fitness
-```
-
-That prints a `database_id`. Paste it into `wrangler.toml`, replacing
-`PASTE_YOUR_DATABASE_ID_HERE`.
-
-```bash
-# 3. Create the tables
-npm run db:init
-
-# 4. Set your passcode (this is what unlocks the app)
-npx wrangler secret put APP_PASSCODE
-
-# 5. Ship it
+npx wrangler login                     # opens a browser; sign in and approve
+npm run setup                          # creates the database, wires up
+                                       # wrangler.toml, creates the tables
+npx wrangler secret put APP_PASSCODE    # the code that unlocks the app
 npm run deploy
 ```
 
 Wrangler prints a URL like `https://fitness.<your-account>.workers.dev`. Open
 it on your phone, enter the passcode, then **Share → Add to Home Screen**.
+
+`npm run setup` is safe to re-run — it reuses an existing database rather than
+making a second one, and stops without touching anything if you aren't signed
+in. If it can't read the database id automatically it tells you the two
+commands to finish by hand rather than half-completing.
 
 ### Optional secrets
 
@@ -75,12 +66,16 @@ npx wrangler secret put SESSION_SECRET     # any long random string; lets you
 npx wrangler secret put ANTHROPIC_API_KEY  # enables AI-written commentary
 ```
 
-Without the API key the app is fully functional — the daily review comes from
-the rules engine and costs nothing to run. With it, the same findings get
-rewritten as prose and you get extra meal ideas beyond the built-in library.
-Requests use `claude-opus-5` with server-side fallbacks enabled, so a safety
-classifier declining a request gets re-run on a fallback model rather than
-failing.
+**The API key is genuinely optional and most people should skip it.** Without
+it the app is fully functional: the daily review, the score and every finding
+come from the rules engine and cost nothing to run. Setting it only changes
+*who writes the prose* — the same findings get rewritten in longer form, plus
+a few extra meal ideas beyond the built-in library.
+
+If you'd rather get commentary by pasting your day into a Claude chat, leave
+this unset. Requests, when enabled, use `claude-opus-5` with server-side
+fallbacks so a safety classifier declining one gets re-run on a fallback model
+rather than failing.
 
 ### Free-tier headroom
 

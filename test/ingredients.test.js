@@ -62,6 +62,18 @@ test('new aliases do not steal existing matches', () => {
   assert.equal(idOf('10g brown sugar'), 'sugar_brown')
 })
 
+test('no alias is claimed by two foods', () => {
+  const seen = new Map()
+  const clashes = []
+  for (const food of FOODS) {
+    for (const term of new Set([food.name.toLowerCase(), ...food.aliases])) {
+      if (seen.has(term)) clashes.push(`"${term}": ${seen.get(term)} vs ${food.id}`)
+      else seen.set(term, food.id)
+    }
+  }
+  assert.deepEqual(clashes, [], clashes.join(' | '))
+})
+
 test('every food row is well-formed and ids stay unique', () => {
   const ids = new Set()
   for (const food of FOODS) {

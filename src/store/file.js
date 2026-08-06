@@ -130,6 +130,13 @@ export class FileStore {
       return review
     })
   }
+
+  async deleteReview(userId, date) {
+    return this.#mutate((data) => {
+      if (data.reviews[userId]) delete data.reviews[userId][date]
+      return true
+    })
+  }
 }
 
 /** Upgrade a pre-multi-user file in place. Idempotent. */

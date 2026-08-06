@@ -181,6 +181,13 @@ export async function handleApi(request, ctx) {
   const profile = await store.getProfile(userId)
   const today = todayIn(profile.timezone)
 
+  // A finished day's review is cached — but logging retroactively changes the
+  // day, so any entry mutation on a past date must throw that cache away or
+  // the coach keeps quoting yesterday's old deficit.
+  const invalidateReview = async (date) => {
+    if (date && date < today) await store.deleteReview(userId, date).catch(() => {})
+  }
+
   // ------------------------------------------------------------------ profile
   if (path === '/profile') {
     if (method === 'GET') {
@@ -226,6 +233,7 @@ export async function handleApi(request, ctx) {
       await store.addEntry(userId, entry)
       // Keep the profile weight current so energy targets track reality.
       await store.setProfile(userId, { ...profile, weightKg: value })
+      await invalidateReview(date)
       return json({ entry }, { status: 201 })
     }
 
@@ -236,6 +244,7 @@ export async function handleApi(request, ctx) {
       }
       const entry = { id: newId(), date, kind: 'water', slot: null, raw: null, items: [], value, createdAt: new Date().toISOString() }
       await store.addEntry(userId, entry)
+      await invalidateReview(date)
       return json({ entry }, { status: 201 })
     }
 
@@ -263,6 +272,7 @@ export async function handleApi(request, ctx) {
       createdAt: new Date().toISOString(),
     }
     await store.addEntry(userId, entry)
+    await invalidateReview(date)
     return json({ entry }, { status: 201 })
   }
 
@@ -270,7 +280,9 @@ export async function handleApi(request, ctx) {
   if (entryMatch) {
     const id = entryMatch[1]
     if (method === 'DELETE') {
+      const existing = await store.getEntry(userId, id)
       const removed = await store.deleteEntry(userId, id)
+      if (removed) await invalidateReview(existing?.date)
       return removed ? json({ ok: true }) : error(404, 'Entry not found.')
     }
     if (method === 'PATCH') {
@@ -287,9 +299,11 @@ export async function handleApi(request, ctx) {
         const items = existing.items.filter((_, index) => index !== body.removeIndex)
         if (!items.length) {
           await store.deleteEntry(userId, id)
+          await invalidateReview(existing.date)
           return json({ entry: null, deleted: true })
         }
         const updated = await store.updateEntry(userId, id, { items })
+        await invalidateReview(existing.date)
         return json({ entry: updated })
       }
 
@@ -317,6 +331,8 @@ export async function handleApi(request, ctx) {
       }
 
       const updated = await store.updateEntry(userId, id, patch)
+      await invalidateReview(existing.date)
+      if (patch.date && patch.date !== existing.date) await invalidateReview(patch.date)
       return json({ entry: updated })
     }
   }
@@ -377,6 +393,7 @@ export async function handleApi(request, ctx) {
       createdAt: new Date().toISOString(),
     }
     await store.addEntry(userId, entry)
+    await invalidateReview(date)
     return json({ entry }, { status: 201 })
   }
 

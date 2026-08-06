@@ -195,6 +195,42 @@ export function parseFoodPhrase(phrase) {
     }
   }
 
+  // Quantities do not have to lead: "white bread 2 slices", "toast two
+  // slices". Look anywhere for a count followed by a known unit word.
+  if (quantity === null && explicitGrams === null) {
+    const anywhere = /\b(\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|half|quarter|couple|few)\s+(?:of\s+)?([a-z]+)\b/g
+    let candidate
+    while ((candidate = anywhere.exec(working))) {
+      const word = candidate[2]
+      if (PORTION_UNITS.has(word) || word in FIXED_UNIT_GRAMS) {
+        quantity = /^\d/.test(candidate[1]) ? parseFloat(candidate[1]) : NUMBER_WORDS[candidate[1]] ?? 1
+        unit = word
+        working = working.replace(candidate[0], ' ')
+        break
+      }
+    }
+  }
+
+  // Multiplier notation: "chicken burger x2", "flat white x 3".
+  if (quantity === null && explicitGrams === null) {
+    const times = working.match(/(?:^|\s)x\s*(\d+(?:\.\d+)?)\b/)
+    if (times) {
+      quantity = parseFloat(times[1])
+      working = working.replace(times[0], ' ')
+    }
+  }
+
+  // A trailing bare number reads as a count: "white bread 2", "eggs 3".
+  // Capped at 20 so dish names with numbers in them ("chicken 65") cannot
+  // silently become twenty portions of something.
+  if (quantity === null && explicitGrams === null) {
+    const trailing = working.match(/\s(\d+(?:\.\d+)?)\s*$/)
+    if (trailing && parseFloat(trailing[1]) <= 20) {
+      quantity = parseFloat(trailing[1])
+      working = working.replace(trailing[0], ' ')
+    }
+  }
+
   // A bare unit with no number still implies one portion: "slice of toast".
   if (quantity === null && explicitGrams === null) {
     const bareUnit = working.match(/^\s*([a-z]+)\s+of\s+/)
@@ -202,6 +238,17 @@ export function parseFoodPhrase(phrase) {
       quantity = 1
       unit = bareUnit[1]
       working = working.replace(bareUnit[0], ' ')
+    }
+  }
+
+  // Or leading without "of" — but only when the phrase as a whole is NOT
+  // already a food ("fillet steak" is a steak, not a fillet of steak).
+  if (quantity === null && explicitGrams === null && !matchFood(working)) {
+    const lead = working.match(/^\s*([a-z]+)\s+(.+)$/)
+    if (lead && (PORTION_UNITS.has(lead[1]) || lead[1] in FIXED_UNIT_GRAMS) && matchFood(lead[2])) {
+      quantity = 1
+      unit = lead[1]
+      working = lead[2]
     }
   }
 

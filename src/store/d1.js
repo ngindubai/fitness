@@ -146,6 +146,13 @@ export class D1Store {
     return row ? JSON.parse(row.data) : null
   }
 
+  async deleteReview(userId, date) {
+    await this.db
+      .prepare('DELETE FROM reviews WHERE user_id = ? AND date = ?')
+      .bind(userId, date)
+      .run()
+  }
+
   async setReview(userId, date, data) {
     await this.db
       .prepare(

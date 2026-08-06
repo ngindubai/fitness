@@ -19,8 +19,8 @@
 const ROWS = [
   // ------------------------------------------------------------------ walking
   ['walk_slow', 'Walking (slow, 2-2.4 mph)', 'slow walk|stroll|strolling|dog walk|walking the dog', 2.8, 'cardio neat', 30],
-  ['walk_moderate', 'Walking (moderate, 3 mph)', 'walk|walking|walked|went for a walk', 3.8, 'cardio neat', 30],
-  ['walk_brisk', 'Walking (brisk, 3.5-4 mph)', 'brisk walk|fast walk|walked briskly|power walk|brisk walking', 4.8, 'cardio', 30],
+  ['walk_moderate', 'Walking (moderate, 3 mph)', 'walk|walking|walked|went for a walk', 3.5, 'cardio neat', 30],
+  ['walk_brisk', 'Walking (brisk, 3.5-4 mph)', 'brisk walk|fast walk|walked briskly|power walk|brisk walking', 4.5, 'cardio', 30],
   ['walk_very_brisk', 'Walking (very brisk, 4-4.4 mph)', 'very brisk walk|marching', 5.5, 'cardio', 30],
   ['hiking', 'Hiking', 'hike|hiking|hiked|rambling|trekking', 6.0, 'cardio vigorous', 90],
   ['stairs', 'Stair climbing', 'stairs|stair climbing|stairmaster|step machine', 9.3, 'cardio vigorous', 15],

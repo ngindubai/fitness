@@ -30,6 +30,18 @@ export const GOALS = {
   gain: { label: 'Build muscle', sign: 1 },
 }
 
+/**
+ * How much of the day's training burn is added back onto the eating budget.
+ * "all" makes the ring respond one-for-one to exercise; "none" keeps the
+ * target fixed so training lands entirely as extra deficit; "half" is the
+ * hedge for people who know exercise calories are estimates.
+ */
+export const EAT_BACK = {
+  all: { label: 'Add all of it to the budget', factor: 1 },
+  half: { label: 'Add half of it back', factor: 0.5 },
+  none: { label: 'Fixed target — training is bonus deficit', factor: 0 },
+}
+
 /** Energy content of one kilogram of body-fat tissue, in kcal. */
 const KCAL_PER_KG = 7700
 
@@ -52,6 +64,7 @@ export const DEFAULT_PROFILE = {
   proteinPerKg: null, // null = derive from goal
   planId: null,       // structured six-month plan, if following one
   planStart: null,    // ISO date the plan began (ideally a Monday)
+  eatBack: 'all',     // how training burn extends the day's calorie budget
 }
 
 /**
@@ -119,7 +132,11 @@ export function baselineBurn(p) {
  */
 export function targetsFor(p, exerciseKcal = 0) {
   const base = baselineBurn(p)
-  const maintenance = base + exerciseKcal
+  // Only the eaten-back share of training extends the budget; the rest of
+  // the burn still shows up as deficit, it just cannot be eaten against.
+  const eatBack = EAT_BACK[p.eatBack] || EAT_BACK.all
+  const credit = Math.round(exerciseKcal * eatBack.factor)
+  const maintenance = base + credit
   const goal = GOALS[p.goal] ? p.goal : 'maintain'
 
   const rate = Math.abs(p.rateKgPerWeek || 0)
@@ -169,9 +186,10 @@ export function targetsFor(p, exerciseKcal = 0) {
   const carbs = Math.max(0, Math.round((calories - protein * 4 - fat * 9) / 4))
 
   // A structured plan prescribes fixed daily numbers; when one is active it
-  // overrides the derived targets, because eating to the plan IS the goal.
+  // overrides the derived targets — but the eaten-back training credit still
+  // applies on top, or the ring would never respond to a workout.
   const plan = p.planId ? PLANS[p.planId] : null
-  const finalCalories = plan ? plan.kcal : calories
+  const finalCalories = plan ? plan.kcal + credit : calories
   const finalProtein = plan ? plan.macros.protein : protein
   const finalFat = plan ? plan.macros.fat : fat
   const finalCarbs = plan ? plan.macros.carbs : carbs
@@ -189,6 +207,7 @@ export function targetsFor(p, exerciseKcal = 0) {
     maintenance: Math.round(maintenance),
     baseline: base,
     exerciseKcal: Math.round(exerciseKcal),
+    exerciseCredit: credit,
     bmr: bmr(p),
     proteinPerKg,
     capNote,

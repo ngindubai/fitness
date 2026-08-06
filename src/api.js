@@ -6,7 +6,7 @@
  */
 
 import { parseMeal, parseWorkout, activityKcal, reweighFoodItem, suggestFoods, suggestWorkouts } from './parse.js'
-import { buildDay, buildWeek, summarisePeriod, targetsFor, climateAdjustedKcal, DEFAULT_PROFILE, BASELINE_LEVELS, GOALS, CLIMATES } from './engine.js'
+import { buildDay, buildWeek, summarisePeriod, targetsFor, climateAdjustedKcal, DEFAULT_PROFILE, BASELINE_LEVELS, GOALS, CLIMATES, EAT_BACK } from './engine.js'
 import { reviewDay, reviewWeek } from './coach.js'
 import { recommendMeals, suggestDay, buildTasteProfile } from './recommend.js'
 import { FOODS, FOODS_BY_ID } from './data/foods.js'
@@ -194,7 +194,7 @@ export async function handleApi(request, ctx) {
       return json({
         profile,
         targets: targetsFor(profile, 0),
-        options: { baselines: BASELINE_LEVELS, goals: GOALS, climates: CLIMATES, plans: PLAN_LIST },
+        options: { baselines: BASELINE_LEVELS, goals: GOALS, climates: CLIMATES, plans: PLAN_LIST, eatBack: EAT_BACK },
         today,
       })
     }
@@ -636,5 +636,6 @@ function sanitiseProfile(input) {
     proteinPerKg: input.proteinPerKg ? clamp(input.proteinPerKg, 1.0, 3.5, null) : null,
     planId: input.planId && PLANS[input.planId] ? input.planId : null,
     planStart: isValidDate(input.planStart) ? input.planStart : null,
+    eatBack: input.eatBack in EAT_BACK ? input.eatBack : DEFAULT_PROFILE.eatBack,
   }
 }

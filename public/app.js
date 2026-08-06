@@ -542,8 +542,11 @@ async function loadDay() {
   ring.style.stroke = used > 1.05 ? 'var(--bad)' : used > 0.92 ? 'var(--warn)' : 'var(--accent)'
 
   const left = Math.round(day.targets.calories - day.caloriesIn)
+  const credit = day.targets.exerciseCredit || 0
   $('ring-big').textContent = Math.abs(left).toLocaleString()
-  $('ring-sub').textContent = left >= 0 ? 'kcal left' : 'kcal over'
+  $('ring-sub').textContent = left >= 0
+    ? credit > 0 ? `kcal left · +${credit.toLocaleString()} trained` : 'kcal left'
+    : 'kcal over'
 
   $('kcal-in').textContent = Math.round(day.caloriesIn).toLocaleString()
   $('kcal-out').textContent = Math.round(day.caloriesOut).toLocaleString()
@@ -1441,6 +1444,8 @@ async function loadProfile() {
     (options.plans || []).map((p) => `<option value="${p.id}">${p.name} (${p.owner})</option>`).join('')
   $('p-plan').value = profile.planId || ''
   $('p-plan-start').value = profile.planStart || ''
+  $('p-eatback').innerHTML = Object.entries(options.eatBack || {}).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')
+  $('p-eatback').value = profile.eatBack || 'all'
 
   renderTargetSummary(targets)
 }
@@ -1470,6 +1475,7 @@ $('profile-form').addEventListener('submit', async (event) => {
         climate: $('p-climate').value,
         planId: $('p-plan').value || null,
         planStart: $('p-plan-start').value || null,
+        eatBack: $('p-eatback').value,
       }),
     })
     state.profile = profile

@@ -637,6 +637,71 @@ nav.tabs button[aria-current='true'] { color: var(--accent); font-weight: 600; }
 }
 .onboard-inner .login-err { text-align: center; }
 
+/* Plan screen: live session card */
+.session-row {
+  display: grid;
+  grid-template-columns: 1fr 44px 12px 48px 58px auto 26px;
+  gap: 6px;
+  align-items: center;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+}
+.session-row:last-child { border-bottom: none; }
+.session-row.done { opacity: 0.55; }
+.session-row .session-name {
+  text-align: left;
+  font-size: 0.88rem;
+  color: var(--text);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-row input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 4px;
+  text-align: center;
+  font-size: 0.85rem;
+}
+.session-row .s-x { color: var(--faint); text-align: center; }
+.session-row .s-del { color: var(--faint); font-size: 0.8rem; padding: 4px; }
+.session-row .s-del:hover { color: var(--bad); }
+
+/* Plan overview: per-session editing */
+.plan-session li { display: flex; align-items: center; gap: 6px; }
+.plan-session li .pex { flex: 1; }
+.plan-session .px-del { color: var(--faint); font-size: 0.72rem; padding: 2px 4px; opacity: 0.6; }
+.plan-session .px-del:hover { color: var(--bad); opacity: 1; }
+.plan-session .px-add {
+  margin-top: 6px;
+  color: var(--accent);
+  font-size: 0.76rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.added-tag { color: var(--accent); font-size: 0.68rem; font-style: normal; }
+
+/* Body tab: per-muscle stats + recommendation */
+.muscle-stat .value { min-width: 108px; text-align: right; font-variant-numeric: tabular-nums; }
+.rec-ex { cursor: default; }
+.rec-ex .rec-muscles { color: var(--faint); font-size: 0.74rem; margin-left: 6px; }
+
+/* Demo animation in the exercise picker */
+.picked-demo { margin: 0 0 8px; }
+.picked-demo .fig { width: min(300px, 100%); display: block; margin: 0 auto; }
+.demo-guide-link {
+  display: block;
+  margin: 2px auto 0;
+  color: var(--accent);
+  font-size: 0.78rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 /* Muscle tiers in the exercise picker */
 .picked-muscles { margin: -4px 0 12px; }
 .tier-row { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-bottom: 5px; }
@@ -827,6 +892,8 @@ nav.tabs button[aria-current='true'] { color: var(--accent); font-weight: 600; }
 .fig .fig-joint { fill: var(--surface); opacity: 0.9; }
 .fig .fig-far { opacity: 0.32; }
 .fig .fig-wt rect { fill: var(--accent); }
+.fig .fig-plate { fill: var(--accent); opacity: 0.9; }
+.fig .fig-plate-hub { fill: var(--bg); }
 .fig .fig-bar { stroke: var(--accent); stroke-linecap: round; }
 .fig .fig-cable { stroke: var(--faint); stroke-dasharray: 3 3; }
 .fig .fig-band { stroke: var(--accent); stroke-linecap: round; opacity: 0.85; }

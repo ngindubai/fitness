@@ -284,6 +284,16 @@
 
     <!-- ========================================================== PLAN -->
     <section id="view-plan" class="hidden">
+      <div class="card" id="session-card">
+        <h2 id="session-title">Today's session</h2>
+        <p class="hint" id="session-sub"></p>
+        <div id="session-rows"></div>
+        <div class="actions" style="flex-wrap:wrap">
+          <button class="btn small" id="session-add" type="button">Add exercise</button>
+          <button class="btn small ghost" id="session-recommend" type="button">Recommend a workout</button>
+          <button class="btn primary small" id="session-log-all" type="button">Log remaining</button>
+        </div>
+      </div>
       <div id="plan-overview"><p class="spinner">Loading…</p></div>
     </section>
 
@@ -500,6 +510,8 @@
     <div id="exercise-list"></div>
     <div id="exercise-config" class="hidden">
       <div class="picked-name" id="picked-name"></div>
+      <div class="picked-demo" id="picked-demo"></div>
+      <p class="hint" id="picked-burn"></p>
       <div class="picked-muscles" id="picked-muscles"></div>
       <div class="grid-3" id="picked-strength">
         <div class="field"><label for="pk-sets">Sets</label><input id="pk-sets" type="number" min="1" max="10" value="3" inputmode="numeric"></div>

@@ -10,6 +10,7 @@
 
 import { PLANS } from './data/plans.js'
 import { parseWorkout } from './parse.js'
+import { exerciseByName } from './data/exercises.js'
 
 const DAY_MS = 86_400_000
 
@@ -46,14 +47,35 @@ function sessionIndexFor(plan, phase, index, weekday) {
 }
 
 /**
+ * A user's edits to a plan session, applied to its exercise list. Edits are
+ * stored on the profile as `planEdits`, keyed "<phaseNumber>|<sessionTitle>"
+ * — stable across the weeks a session repeats. Removals match by name;
+ * additions come from the exercise menu and adopt the phase's set scheme.
+ */
+export function applySessionEdits(exercises, phaseNumber, sessionTitle, edits) {
+  const edit = edits?.[`${phaseNumber}|${sessionTitle}`]
+  if (!edit) return exercises
+  const removed = new Set((edit.removed || []).map((n) => n.toLowerCase()))
+  const kept = exercises.filter((e) => !removed.has(e.name.toLowerCase()))
+  const added = (edit.added || []).map((a) => ({
+    name: a.name,
+    group: exerciseByName(a.name)?.group || 'full',
+    note: 'added by you',
+    addedByUser: true,
+  }))
+  return [...kept, ...added]
+}
+
+/**
  * The full prescription for one date.
  *
  * @param {string} planId
  * @param {string} startDate ISO date the plan began (ideally a Monday)
  * @param {string} date ISO date being asked about
+ * @param {object} [planEdits] the profile's per-session edits
  * @returns {object|null} null when the plan id is unknown
  */
-export function planForDate(planId, startDate, date) {
+export function planForDate(planId, startDate, date, planEdits) {
   const plan = PLANS[planId]
   if (!plan || !startDate) return null
 
@@ -88,7 +110,7 @@ export function planForDate(planId, startDate, date) {
         : deload
           ? `Deload — ${sets} set${sets === 1 ? '' : 's'} of ${phase.scheme.reps}, same weights, half the work`
           : `${sets} × ${phase.scheme.reps} · ${phase.scheme.effort} · rest ${phase.scheme.rest}`,
-      exercises: session.exercises.map((e) => ({
+      exercises: applySessionEdits(session.exercises, phase.number, session.title, planEdits).map((e) => ({
         ...e,
         sets: testWeek ? 1 : sets,
         reps: testWeek ? 'test' : phase.scheme.reps,
@@ -179,27 +201,32 @@ export function itemsForBlock(plan, block) {
 
   if (block.key === 'lift') {
     // One structured strength item per prescribed exercise: ~3 min per set at
-    // the standard lifting MET, tonnage unknown until weights are logged.
-    return block.exercises.map((exercise) => ({
-      raw: exercise.name,
-      activityId: null,
-      name: `${exercise.name} ${exercise.sets}×${exercise.reps}`,
-      minutes: Math.max(3, exercise.sets * 3),
-      distanceKm: null,
-      met: 5.0,
-      tags: ['strength'],
-      recognised: true,
-      fromPlan: true,
-      exercise: {
-        id: null,
-        name: exercise.name,
-        group: exercise.group || 'full',
-        sets: exercise.sets,
-        reps: null,
-        weightKg: null,
-        volume: null,
-      },
-    }))
+    // that exercise's compendium MET class, tonnage unknown until weights are
+    // logged. Matching by name also recovers the exercise id, which is what
+    // lets the muscle heat map credit plan sessions precisely.
+    return block.exercises.map((exercise) => {
+      const known = exerciseByName(exercise.name)
+      return {
+        raw: exercise.name,
+        activityId: null,
+        name: `${exercise.name} ${exercise.sets}×${exercise.reps}`,
+        minutes: Math.max(3, exercise.sets * 3),
+        distanceKm: null,
+        met: known?.met ?? 5.0,
+        tags: ['strength'],
+        recognised: true,
+        fromPlan: true,
+        exercise: {
+          id: known?.id ?? null,
+          name: exercise.name,
+          group: exercise.group || known?.group || 'full',
+          sets: exercise.sets,
+          reps: null,
+          weightKg: null,
+          volume: null,
+        },
+      }
+    })
   }
 
   // Cardio and steps: parse the canonical phrase.
@@ -210,7 +237,7 @@ export function itemsForBlock(plan, block) {
  * Everything a "Plan" overview screen needs: the template itself plus the
  * calendar the start date pins it to.
  */
-export function planOverview(planId, startDate, today) {
+export function planOverview(planId, startDate, today, planEdits) {
   const plan = PLANS[planId]
   if (!plan) return null
 
@@ -244,7 +271,10 @@ export function planOverview(planId, startDate, today) {
         focus: phase.focus,
         scheme: phase.scheme,
         rotation: phase.rotation,
-        sessions: phase.sessions,
+        sessions: phase.sessions.map((session) => ({
+          ...session,
+          exercises: applySessionEdits(session.exercises, phase.number, session.title, planEdits),
+        })),
         cardio: (Array.isArray(phase.cardio) ? phase.cardio : [phase.cardio]).filter(Boolean),
         restCardio: phase.restCardio,
         ...(startDate ? {

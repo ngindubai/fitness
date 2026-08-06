@@ -12,7 +12,7 @@
  * effort is "in recovery" for 24 hours from when the session was logged.
  */
 
-import { EXERCISES_BY_ID, EXERCISE_ALIAS_INDEX } from './data/exercises.js'
+import { EXERCISES, EXERCISES_BY_ID, EXERCISE_ALIAS_INDEX } from './data/exercises.js'
 
 export const MUSCLES = [
   { id: 'chest', name: 'Chest', side: 'front' },
@@ -169,4 +169,134 @@ export function neglectedMuscles(effortTotals, { threshold = 1 } = {}) {
   const trained = Object.values(effortTotals).some((effort) => effort >= threshold)
   if (!trained) return []
   return MUSCLES.filter((m) => (effortTotals[m.id] || 0) < threshold).map((m) => m.id)
+}
+
+/**
+ * The hard numbers behind a date range, per muscle: how many reps and how
+ * many distinct exercises actually hit it (any tier), alongside the weighted
+ * effort. Reps are facts, so they are NOT tier-weighted — a set of 10 rows
+ * is ten reps for the lats and ten for the biceps; the tier weighting lives
+ * in `effort`. Cardio has no reps; it shows up as minutes.
+ */
+export function muscleRangeStats(workoutEntries) {
+  const perMuscle = {}
+  const bucket = (muscle) => (perMuscle[muscle] ||= {
+    effort: 0, reps: 0, sets: 0, cardioMinutes: 0, exercises: new Set(),
+  })
+  const totals = { reps: 0, sets: 0, cardioMinutes: 0, exercises: new Set(), workouts: workoutEntries.length }
+
+  for (const entry of workoutEntries) {
+    for (const item of entry.items || []) {
+      const efforts = itemMuscleEffort(item)
+
+      if (item.exercise) {
+        const sets = item.exercise.sets || Math.max(1, Math.round((item.minutes || 9) / 3))
+        const reps = item.exercise.reps ? sets * item.exercise.reps : 0
+        const name = item.exercise.name || item.name
+        totals.sets += sets
+        totals.reps += reps
+        totals.exercises.add(name)
+        const muscles = strengthMusclesFor(item)
+        for (const muscle of Object.keys(muscles)) {
+          const b = bucket(muscle)
+          b.sets += sets
+          b.reps += reps
+          b.exercises.add(name)
+        }
+        for (const [muscle, effort] of Object.entries(efforts)) bucket(muscle).effort += effort
+        continue
+      }
+
+      const muscles = cardioMusclesFor(item.activityId)
+      if (muscles && item.minutes) {
+        totals.cardioMinutes += item.minutes
+        totals.exercises.add(item.name)
+        for (const muscle of Object.keys(muscles)) {
+          const b = bucket(muscle)
+          b.cardioMinutes += item.minutes
+          b.exercises.add(item.name)
+        }
+      }
+      for (const [muscle, effort] of Object.entries(itemMuscleEffort(item))) bucket(muscle).effort += effort
+    }
+  }
+
+  const shaped = {}
+  for (const [muscle, b] of Object.entries(perMuscle)) {
+    shaped[muscle] = {
+      effort: Math.round(b.effort * 10) / 10,
+      reps: b.reps,
+      sets: b.sets,
+      cardioMinutes: Math.round(b.cardioMinutes),
+      exercises: [...b.exercises],
+    }
+  }
+  return {
+    perMuscle: shaped,
+    totals: {
+      reps: totals.reps,
+      sets: totals.sets,
+      cardioMinutes: Math.round(totals.cardioMinutes),
+      exercises: totals.exercises.size,
+      workouts: totals.workouts,
+    },
+  }
+}
+
+/**
+ * Build a workout that targets whatever the window neglected. Muscles are
+ * ranked by how little effort they received; exercises are chosen from the
+ * menu so that every pick's PRIMARY muscle is one of the gaps, preferring
+ * movements whose secondary muscles also cover other gaps (compound bias).
+ *
+ * @param {Array} workoutEntries entries from the look-back window
+ * @param {{count?: number}} [opts]
+ * @returns {{targets: string[], exercises: Array}}
+ */
+export function recommendWorkout(workoutEntries, { count = 5 } = {}) {
+  const effort = muscleEffortFor(workoutEntries)
+  // Need: 1 at zero effort, fading toward 0 as a muscle approaches "enough"
+  // for a week (~6 effort units ≈ two solid sessions).
+  const need = (muscle) => Math.max(0, 1 - (effort[muscle] || 0) / 6)
+  const ranked = MUSCLES.map((m) => m.id).sort((a, b) => need(b) - need(a))
+
+  const chosen = []
+  const covered = new Set()
+  for (const target of ranked) {
+    if (chosen.length >= count) break
+    if (need(target) <= 0.34) break // the rest of the body had a fine week
+    if (covered.has(target)) continue
+
+    let best = null
+    let bestScore = 0
+    for (const exercise of EXERCISES) {
+      if (chosen.some((c) => c.id === exercise.id)) continue
+      if ((exercise.muscles[target] || 0) !== 1) continue // must be the prime mover
+      let score = 0
+      for (const [muscle, share] of Object.entries(exercise.muscles)) {
+        score += share * need(muscle) * (covered.has(muscle) ? 0.3 : 1)
+      }
+      if (score > bestScore) { best = exercise; bestScore = score }
+    }
+    if (!best) continue
+
+    const reps = best.met >= 8 ? 15 : best.group === 'core' ? 12 : 10
+    chosen.push({
+      id: best.id,
+      name: best.name,
+      group: best.group,
+      sets: 3,
+      reps,
+      met: best.met,
+      muscles: best.muscles,
+    })
+    for (const [muscle, share] of Object.entries(best.muscles)) {
+      if (share >= 0.5) covered.add(muscle)
+    }
+  }
+
+  return {
+    targets: ranked.filter((m) => need(m) > 0.34), // every gap, neediest first
+    exercises: chosen,
+  }
 }

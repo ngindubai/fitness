@@ -67,6 +67,7 @@ export const DEFAULT_PROFILE = {
   planStart: null,    // ISO date the plan began (ideally a Monday)
   eatBack: 'all',     // how training burn extends the day's calorie budget
   onboarded: false,   // true once sex/age/height/weight were entered by hand
+  planEdits: {},      // per-session plan customisations (removed/added exercises)
 }
 
 /**

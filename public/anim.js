@@ -179,6 +179,37 @@ function drawProps(group, props, joints) {
       const b = joints.legs[1]?.knee
       if (a && b) line(group, 'fig-band', [a[0], a[1] + 3], [b[0], b[1] + 3], 5)
     }
+    // A barbell seen end-on: one plate disc where the hands hold the bar.
+    if (prop.t === 'plate') {
+      const a = joints.arms[0]?.wrist
+      const b = joints.arms[1]?.wrist
+      const mid = a && b ? [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] : a || b
+      if (mid) {
+        dot(group, 'fig-plate', mid, prop.r ?? 7)
+        dot(group, 'fig-plate-hub', mid, 1.8)
+      }
+    }
+    if (prop.t === 'ball') {
+      const a = joints.arms[0]?.wrist
+      const b = joints.arms[1]?.wrist
+      const mid = a && b ? [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] : a || b
+      if (mid) dot(group, 'fig-plate', [mid[0] + (prop.dx || 0), mid[1] + (prop.dy || 0)], prop.r ?? 6.5)
+    }
+    if (prop.t === 'kettlebell') {
+      const a = joints.arms[0]?.wrist
+      const b = joints.arms[1]?.wrist
+      const mid = a && b ? [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] : a || b
+      if (mid) {
+        dot(group, 'fig-plate', [mid[0], mid[1] + 7], 5.5)
+        line(group, 'fig-bar', [mid[0] - 4, mid[1] + 1], [mid[0] + 4, mid[1] + 1], 2.5)
+      }
+    }
+    // Battle ropes: a line from each wrist to a floor anchor.
+    if (prop.t === 'rope') {
+      for (const arm of joints.arms) {
+        if (arm?.wrist) line(group, 'fig-band', arm.wrist, prop.anchor || [214, 168], 3)
+      }
+    }
   }
 }
 

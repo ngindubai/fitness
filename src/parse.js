@@ -519,7 +519,9 @@ function matchExercise(phrase) {
  * Roughly three minutes per working set including rest — the standard
  * assumption for hypertrophy-range training. Energy is time x MET; the tonnage
  * (sets x reps x load) is tracked because progressive overload, not calories,
- * is what strength work is for.
+ * is what strength work is for. Each exercise carries its own compendium MET
+ * class (see data/exercises.js) — heavy barbell compounds cost more per
+ * minute than curls; LIFTING_MET is only the fallback for unrecognised lifts.
  */
 const MINUTES_PER_SET = 3
 const LIFTING_MET = 5.0
@@ -559,7 +561,7 @@ function parseStrengthPhrase(raw, working) {
     name: detail ? `${name} ${detail}` : name,
     minutes,
     distanceKm: null,
-    met: LIFTING_MET,
+    met: matched?.exercise.met ?? LIFTING_MET,
     tags: ['strength'],
     recognised: true,
     exercise: {

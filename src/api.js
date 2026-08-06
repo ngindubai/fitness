@@ -13,7 +13,7 @@ import { FOODS, FOODS_BY_ID } from './data/foods.js'
 import { ACTIVITIES } from './data/activities.js'
 import { issueToken, verifyToken, checkPasscode, extractToken, sessionCookie, clearedCookie, hashPasscode, verifyPasscodeHash } from './auth.js'
 import { planForDate, itemsForBlock, planOverview } from './plan.js'
-import { MUSCLES, muscleEffortFor, recoveringMuscles, cardioMusclesFor, RECOVERY_HOURS } from './muscles.js'
+import { MUSCLES, muscleEffortFor, muscleRangeStats, recommendWorkout, recoveringMuscles, cardioMusclesFor, RECOVERY_HOURS } from './muscles.js'
 import { EXERCISES, muscleTiers } from './data/exercises.js'
 import { PLANS, PLAN_LIST } from './data/plans.js'
 import { aiReview, aiMealIdeas, isAiConfigured } from './ai.js'
@@ -376,7 +376,7 @@ export async function handleApi(request, ctx) {
   if (path === '/plan-day' && method === 'GET') {
     if (!profile.planId || !PLANS[profile.planId]) return json({ plan: null })
     const date = isValidDate(url.searchParams.get('date')) ? url.searchParams.get('date') : today
-    const day = planForDate(profile.planId, profile.planStart || today, date)
+    const day = planForDate(profile.planId, profile.planStart || today, date, profile.planEdits)
     if (!day) return json({ plan: null })
 
     // A block is "done" when an entry item carries its plan key.
@@ -400,7 +400,7 @@ export async function handleApi(request, ctx) {
     const date = isValidDate(body?.date) ? body.date : today
     const key = String(body?.key || '')
 
-    const day = planForDate(profile.planId, profile.planStart || today, date)
+    const day = planForDate(profile.planId, profile.planStart || today, date, profile.planEdits)
     if (!day || day.status !== 'active') return error(400, 'The plan is not active on that date.')
     const block = day.blocks.find((b) => b.key === key)
     if (!block) return error(404, 'No such block on that day.')
@@ -434,7 +434,7 @@ export async function handleApi(request, ctx) {
 
   if (path === '/plan-overview' && method === 'GET') {
     if (!profile.planId || !PLANS[profile.planId]) return json({ plan: null })
-    return json(planOverview(profile.planId, profile.planStart, today))
+    return json(planOverview(profile.planId, profile.planStart, today, profile.planEdits))
   }
 
   // ----------------------------------------------------------------- muscles
@@ -459,20 +459,42 @@ export async function handleApi(request, ctx) {
     if (from > to) return error(400, 'from must not be after to.')
     const entries = await store.listEntries(userId, from, to)
     const workouts = entries.filter((e) => e.kind === 'workout')
+    const stats = muscleRangeStats(workouts)
     return json({
       mode: 'range',
       from,
       to,
       effort: muscleEffortFor(workouts),
+      stats: stats.perMuscle,
+      totals: stats.totals,
       workoutCount: workouts.length,
+      recommendation: recommendWorkout(workouts),
       catalogue: MUSCLES,
     })
   }
 
+  // A workout built from this week's gaps: least-trained muscles first,
+  // menu exercises whose primary muscle fills them.
+  if (path === '/recommend-workout' && method === 'GET') {
+    const to = isValidDate(url.searchParams.get('to')) ? url.searchParams.get('to') : today
+    const from = isValidDate(url.searchParams.get('from')) ? url.searchParams.get('from') : addDays(to, -6)
+    if (from > to) return error(400, 'from must not be after to.')
+    const entries = await store.listEntries(userId, from, to)
+    const workouts = entries.filter((e) => e.kind === 'workout')
+    const recommendation = recommendWorkout(workouts)
+    return json({ from, to, ...recommendation, catalogue: MUSCLES })
+  }
+
   // The exercise menu: every lift with its muscles, plus the cardio machines.
   if (path === '/exercises' && method === 'GET') {
+    // Net kcal for one ~3-minute working set at this user's weight:
+    // (MET − 1 resting) × kg × hours. Personal, because calories are.
+    const kcalPerSet = (met) => Math.max(1, Math.round((met - 1) * profile.weightKg * (3 / 60)))
     return json({
-      exercises: EXERCISES.map((e) => ({ id: e.id, name: e.name, group: e.group, muscles: e.muscles, tiers: muscleTiers(e) })),
+      exercises: EXERCISES.map((e) => ({
+        id: e.id, name: e.name, group: e.group, muscles: e.muscles,
+        tiers: muscleTiers(e), met: e.met, kcalPerSet: kcalPerSet(e.met),
+      })),
       cardio: ACTIVITIES
         .filter((a) => CARDIO_MACHINES.has(a.id))
         .map((a) => {
@@ -780,5 +802,28 @@ function sanitiseProfile(input) {
     planStart: isValidDate(input.planStart) ? input.planStart : null,
     eatBack: input.eatBack in EAT_BACK ? input.eatBack : DEFAULT_PROFILE.eatBack,
     onboarded: input.onboarded === true,
+    planEdits: sanitisePlanEdits(input.planEdits),
   }
+}
+
+/**
+ * Per-session plan edits: bounded, name-only, nothing executable. Shape:
+ * { "<phase>|<session title>": { removed: [names], added: [{name}] } }
+ */
+function sanitisePlanEdits(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {}
+  const out = {}
+  for (const [key, value] of Object.entries(input).slice(0, 40)) {
+    if (key.length > 80 || !value || typeof value !== 'object') continue
+    const removed = (Array.isArray(value.removed) ? value.removed : [])
+      .filter((n) => typeof n === 'string' && n.trim().length >= 2)
+      .map((n) => n.trim().slice(0, 60))
+      .slice(0, 20)
+    const added = (Array.isArray(value.added) ? value.added : [])
+      .filter((a) => a && typeof a.name === 'string' && a.name.trim().length >= 2)
+      .map((a) => ({ name: a.name.trim().slice(0, 60) }))
+      .slice(0, 20)
+    if (removed.length || added.length) out[key] = { removed, added }
+  }
+  return out
 }

@@ -155,7 +155,60 @@ const ROWS = [
   ['jump_squat', 'Jump squats', 'jump squat|jump squats|squat jumps', 'legs', 'quads:1 glutes:1 calves:0.5'],
 ]
 
-/** @typedef {{id:string,name:string,aliases:string[],group:string,muscles:Record<string,number>}} Exercise */
+/** @typedef {{id:string,name:string,aliases:string[],group:string,muscles:Record<string,number>,met:number}} Exercise */
+
+/**
+ * Energy cost per exercise, in METs, from the 2011 Compendium of Physical
+ * Activities (Ainsworth et al., MSSE 43(8) — official supplementary table).
+ * The compendium prices lifting by class, not by named lift, so every
+ * exercise here is assigned its class value:
+ *
+ *   8.0  code 02020/02040 — vigorous calisthenics & kettlebell/ballistic
+ *        conditioning (burpees, swings, jumps, slams, ropes)
+ *   6.0  code 02050 — vigorous free-weight lifting, power lifting style
+ *        (heavy ground-based barbell compounds, loaded carries, sled)
+ *   5.0  code 02052 — resistance training, squats, slow or explosive effort
+ *        (all other multi-joint compound lifts)
+ *   3.8  code 02022 — moderate calisthenics (push-ups, pull-ups, dips)
+ *   3.5  code 02054 — resistance training, multiple exercises, 8–15 reps
+ *        (single-joint isolation and machine pump work)
+ *   2.8  code 02024 — light calisthenics (floor core work, holds)
+ *
+ * Energy still = MET × time (≈3 min a set including rest), never per-rep —
+ * the calorie difference between lifts is the muscle mass moved, which is
+ * exactly what these classes encode.
+ */
+const MET_CLASSES = {
+  8.0: ['kettlebell_swing', 'burpee', 'box_jump', 'jump_squat', 'mountain_climber',
+    'battle_ropes', 'wall_ball', 'med_ball_slam'],
+  6.0: ['squat', 'front_squat', 'deadlift', 'clean', 'snatch', 'thruster', 'push_press',
+    'sled', 'farmer_carry'],
+  5.0: ['goblet_squat', 'hack_squat', 'leg_press', 'pistol_squat', 'sumo_squat',
+    'rdl', 'single_leg_rdl', 'good_morning', 'hip_thrust',
+    'lunge', 'reverse_lunge', 'split_squat', 'bulgarian_split_squat', 'step_up',
+    'lateral_lunge', 'curtsy_lunge',
+    'bench', 'close_grip_bench', 'incline_bench', 'decline_bench', 'db_press',
+    'incline_db_press', 'chest_press_machine',
+    'ohp', 'db_shoulder_press', 'arnold_press', 'landmine_press',
+    'row', 'db_row', 'cable_row', 't_bar_row', 'meadows_row', 'lat_pulldown',
+    'turkish_getup'],
+  3.8: ['press_up', 'dip', 'pike_pushup', 'inverted_row', 'pull_up', 'chin_up', 'ab_rollout'],
+  3.5: ['sissy_squat', 'wall_sit', 'glute_bridge', 'back_extension',
+    'leg_extension', 'leg_curl', 'calf_raise', 'hip_abduction', 'hip_adduction',
+    'glute_kickback', 'chest_fly', 'svend_press', 'lateral_raise', 'front_raise',
+    'upright_row', 'tricep_pushdown', 'tricep_extension', 'skull_crusher',
+    'tricep_kickback', 'straight_arm_pulldown', 'pullover', 'face_pull',
+    'rear_delt_fly', 'shrug', 'curl', 'hammer_curl', 'preacher_curl',
+    'incline_curl', 'reverse_curl', 'wrist_curl', 'reverse_hyper',
+    'cable_crunch', 'woodchop', 'russian_twist', 'leg_raise', 'pallof_press'],
+  2.8: ['plank', 'side_plank', 'crunch', 'dead_bug', 'bird_dog', 'hollow_hold',
+    'superman', 'copenhagen_plank'],
+}
+
+const MET_BY_ID = new Map()
+for (const [met, ids] of Object.entries(MET_CLASSES)) {
+  for (const id of ids) MET_BY_ID.set(id, Number(met))
+}
 
 function parseMuscles(spec) {
   const out = {}
@@ -173,6 +226,9 @@ export const EXERCISES = ROWS.map(([id, name, aliases, group, muscles]) => ({
   aliases: String(aliases).split('|').filter(Boolean),
   group,
   muscles: parseMuscles(muscles),
+  // Unlisted ids default to the compendium's general lifting class (02054);
+  // a test asserts the map actually covers everything so this never hides.
+  met: MET_BY_ID.get(id) ?? 3.5,
 }))
 
 export const EXERCISES_BY_ID = new Map(EXERCISES.map((e) => [e.id, e]))
@@ -200,3 +256,16 @@ export const EXERCISE_ALIAS_INDEX = (() => {
 })()
 
 export const MUSCLE_GROUPS = ['legs', 'push', 'pull', 'core', 'full']
+
+/**
+ * The exercise a free-text name refers to, or null. Used by the plan engine
+ * and recommenders, which know names ("Goblet squat") rather than ids.
+ */
+export function exerciseByName(name) {
+  const lower = String(name || '').toLowerCase()
+  if (!lower) return null
+  for (const { term, exercise } of EXERCISE_ALIAS_INDEX) {
+    if (lower.includes(term)) return exercise
+  }
+  return null
+}

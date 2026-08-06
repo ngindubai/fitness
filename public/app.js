@@ -9,10 +9,12 @@
  */
 let findMovement = () => null
 let mountAnimation = null
-const guideReady = Promise.all([import('./movements.js'), import('./anim.js')])
-  .then(([movements, anim]) => {
+let demoForExercise = () => null
+const guideReady = Promise.all([import('./movements.js'), import('./anim.js'), import('./demos.js')])
+  .then(([movements, anim, demos]) => {
     findMovement = movements.findMovement
     mountAnimation = anim.mountAnimation
+    demoForExercise = demos.demoForExercise
   })
   .catch(() => {})
 
@@ -192,7 +194,7 @@ function showView(view) {
   document.querySelectorAll('nav.tabs button, .side-nav button').forEach((button) => {
     button.setAttribute('aria-current', String(button.dataset.view === view))
   })
-  if (view === 'plan') loadPlanOverview()
+  if (view === 'plan') { loadPlanOverview(); loadPlanSession() }
   if (view === 'coach') loadReview()
   if (view === 'stats') loadStats()
   if (view === 'body') loadBody()
@@ -772,9 +774,14 @@ function renderPlanOverview(container, { plan, startDate, endDate, currentWeek }
         <p class="plan-detail faint">${phase.scheme.sets} sets × ${escapeHtml(phase.scheme.reps)} · ${escapeHtml(phase.scheme.effort)} · rest ${escapeHtml(phase.scheme.rest)}</p>
         <div class="plan-sessions">
           ${phase.sessions.map((s) => `
-            <div class="plan-session">
+            <div class="plan-session" data-skey="${phase.number}|${escapeHtml(s.title)}">
               <div class="plan-session-title">${escapeHtml(s.title)}</div>
-              <ul>${s.exercises.map((e) => `<li>${escapeHtml(e.name)}</li>`).join('')}</ul>
+              <ul>${s.exercises.map((e) => `
+                <li data-ex="${escapeHtml(e.name)}">
+                  <span class="pex">${escapeHtml(e.name)}${e.addedByUser ? ' <em class="added-tag">yours</em>' : ''}</span>
+                  <button type="button" class="px-del" aria-label="Remove ${escapeHtml(e.name)} from this session">✕</button>
+                </li>`).join('')}</ul>
+              <button type="button" class="px-add">+ Add from the menu</button>
             </div>`).join('')}
         </div>
         ${phase.cardio.length ? `<p class="plan-detail"><b>Cardio:</b> ${phase.cardio.map((c) => escapeHtml(c.title)).join(' · ')}</p>` : ''}
@@ -811,8 +818,30 @@ function renderPlanOverview(container, { plan, startDate, endDate, currentWeek }
       ${plan.rules.map((r) => `<div class="finding note">${escapeHtml(r)}</div>`).join('')}
     </div>`
 
-  // Every exercise line in the phase cards opens its movement guide.
-  container.querySelectorAll('.plan-phase .plan-session li').forEach((li) => attachGuide(li, li.textContent))
+  // Every exercise line in the phase cards opens its movement guide, and the
+  // edit buttons make the plan yours: ✕ removes a lift from that session for
+  // good, "+ Add" pulls one in from the exercise menu.
+  container.querySelectorAll('.plan-phase .plan-session li .pex').forEach((span) =>
+    attachGuide(span, span.textContent))
+  container.querySelectorAll('.plan-phase .plan-session .px-del').forEach((button) => {
+    button.addEventListener('click', () => {
+      const li = button.closest('li')
+      const skey = button.closest('.plan-session').dataset.skey
+      const name = li.dataset.ex
+      savePlanEdit(skey, (edit) => {
+        const lower = name.toLowerCase()
+        if (edit.added.some((a) => a.name.toLowerCase() === lower)) {
+          edit.added = edit.added.filter((a) => a.name.toLowerCase() !== lower)
+        } else if (!edit.removed.some((n) => n.toLowerCase() === lower)) {
+          edit.removed.push(name)
+        }
+      })
+    })
+  })
+  container.querySelectorAll('.plan-phase .plan-session .px-add').forEach((button) => {
+    button.addEventListener('click', () =>
+      openExercisePicker(`plan-edit:${button.closest('.plan-session').dataset.skey}`))
+  })
 
   // Thumbnail grid of every distinct movement this plan uses.
   const seen = new Map()
@@ -1428,30 +1457,66 @@ async function loadBody() {
     const max = Math.max(1, ...Object.values(efforts))
     const worked = Object.keys(efforts).length
 
+    // The headline is the actual work done, not a workout count.
+    const t = data.totals || {}
+    const rangeLabel = `${fmtDate(from, { day: 'numeric', month: 'short' })} – ${fmtDate(to, { day: 'numeric', month: 'short' })}`
     $('body-caption').textContent = data.workoutCount
-      ? `${data.workoutCount} workout${data.workoutCount === 1 ? '' : 's'} between ${fmtDate(from, { day: 'numeric', month: 'short' })} and ${fmtDate(to, { day: 'numeric', month: 'short' })}. Darker means more work; grey means skipped.`
+      ? `${rangeLabel}: ${t.exercises || 0} exercise${t.exercises === 1 ? '' : 's'}, ` +
+        `${(t.reps || 0).toLocaleString()} reps in ${(t.sets || 0).toLocaleString()} sets` +
+        `${t.cardioMinutes ? ` plus ${t.cardioMinutes} min of cardio` : ''}, across ${data.workoutCount} session${data.workoutCount === 1 ? '' : 's'}.`
       : 'No training logged in this range.'
 
     renderBodyMap($('body-map'), (muscle) => {
       const effort = efforts[muscle] || 0
       if (!effort) return { fill: 'var(--faint)', opacity: 0.12, title: `${names[muscle]} — nothing` }
+      const s = data.stats?.[muscle]
+      const detailTip = s
+        ? `${s.reps ? `${s.reps} reps` : ''}${s.cardioMinutes ? `${s.reps ? ' + ' : ''}${s.cardioMinutes} min cardio` : ''} · ${s.exercises.length} exercise${s.exercises.length === 1 ? '' : 's'}`
+        : `${effort} effort units`
       return {
         fill: 'var(--accent)',
         opacity: 0.2 + 0.7 * (effort / max),
-        title: `${names[muscle]} — ${effort} effort units`,
+        title: `${names[muscle]} — ${detailTip}`,
       }
     })
 
     const rows = Object.entries(efforts).sort((a, b) => b[1] - a[1])
+    const muscleRows = rows.map(([muscle, effort]) => {
+      const s = data.stats?.[muscle] || { reps: 0, sets: 0, cardioMinutes: 0, exercises: [] }
+      const what = [
+        s.reps ? `${s.reps.toLocaleString()} reps` : null,
+        s.cardioMinutes ? `${s.cardioMinutes} min` : null,
+      ].filter(Boolean).join(' + ') || '—'
+      return `
+        <div class="bar-row muscle-stat" title="${escapeHtml(s.exercises.join(', '))}">
+          <span class="label">${escapeHtml(names[muscle])}</span>
+          <span class="bar-track"><span class="bar-fill" style="width:${Math.round((effort / max) * 100)}%"></span></span>
+          <span class="value">${what} · ${s.exercises.length} ex</span>
+        </div>`
+    }).join('')
+
+    // Tomorrow's fix: what this range neglected, and what would repair it.
+    const rec = data.recommendation
+    const recBlock = rec?.exercises?.length
+      ? `<h2 style="margin-top:14px">Tomorrow's workout — what's lacking</h2>
+         <p class="hint">Least-trained in this range: ${rec.targets.slice(0, 6).map((m) => names[m] || m).join(', ')}.</p>
+         ${rec.exercises.map((e) => `
+           <div class="finding note rec-ex" data-exid="${e.id}">
+             <b>${escapeHtml(e.name)}</b> — ${e.sets}×${e.reps}
+             <span class="rec-muscles">${Object.entries(e.muscles).filter(([, s]) => s === 1).map(([m]) => names[m] || m).join(', ')}</span>
+           </div>`).join('')}
+         <button class="btn small" id="body-rec-to-plan" type="button">Open this workout in Plan</button>`
+      : (data.workoutCount ? '<p class="hint">Nothing is badly lacking — this range covered the body well.</p>' : '')
+
     detail.innerHTML = rows.length
-      ? `<h2>Effort by muscle</h2>` + rows.map(([muscle, effort]) => `
-          <div class="bar-row">
-            <span class="label">${escapeHtml(names[muscle])}</span>
-            <span class="bar-track"><span class="bar-fill" style="width:${Math.round((effort / max) * 100)}%"></span></span>
-            <span class="value">${effort}</span>
-          </div>`).join('') +
-        (worked < 17 ? `<p class="hint">Untrained in this range: ${data.catalogue.filter((m) => !efforts[m.id]).map((m) => m.name).join(', ')}.</p>` : '')
-      : ''
+      ? `<h2>Work by muscle</h2>${muscleRows}` +
+        (worked < 17 ? `<p class="hint">Untrained in this range: ${data.catalogue.filter((m) => !efforts[m.id]).map((m) => m.name).join(', ')}.</p>` : '') +
+        recBlock
+      : recBlock
+    $('body-rec-to-plan')?.addEventListener('click', () => {
+      state.sessionOverride = { title: "Recommended — what's lacking", exercises: rec.exercises }
+      showView('plan')
+    })
   } catch (error) {
     $('body-caption').textContent = error.message
   }
@@ -1462,14 +1527,25 @@ async function loadBody() {
 let exerciseMenu = null // {exercises, cardio} from the API, cached
 let pickedExercise = null
 
-$('browse-exercises').addEventListener('click', async () => {
+// Where a picked exercise goes: the Today logger ('log'), the Plan-screen
+// session card ('session'), or a persistent plan edit ('plan-edit:<key>').
+let pickerMode = 'log'
+
+async function ensureExerciseMenu() {
+  if (!exerciseMenu) exerciseMenu = await api('/exercises').catch(() => null)
+  return exerciseMenu
+}
+
+async function openExercisePicker(mode = 'log') {
+  pickerMode = mode
   $('exercise-sheet').classList.remove('hidden')
   $('exercise-config').classList.add('hidden')
   $('exercise-list').classList.remove('hidden')
   $('exercise-search').value = ''
-  if (!exerciseMenu) {
-    exerciseMenu = await api('/exercises').catch(() => null)
-    if (!exerciseMenu) return
+  await guideReady // demos need the animation engine
+  const first = !exerciseMenu
+  if (!(await ensureExerciseMenu())) return
+  if (first) {
     const groups = ['all', 'legs', 'push', 'pull', 'core', 'full', 'cardio']
     $('exercise-groups').innerHTML = groups.map((g) =>
       `<button data-exgroup="${g}" aria-pressed="${g === 'all'}">${g[0].toUpperCase()}${g.slice(1)}</button>`).join('')
@@ -1483,7 +1559,9 @@ $('browse-exercises').addEventListener('click', async () => {
     $('exercise-search').addEventListener('input', renderExerciseList)
   }
   renderExerciseList()
-})
+}
+
+$('browse-exercises').addEventListener('click', () => openExercisePicker('log'))
 
 $('exercise-close').addEventListener('click', () => $('exercise-sheet').classList.add('hidden'))
 $('exercise-sheet').addEventListener('click', (event) => {
@@ -1519,11 +1597,39 @@ function renderExerciseList() {
   if (!filtered.length) list.innerHTML = '<p class="empty">Nothing matches.</p>'
 }
 
+let pickedDemo = null
+
 function pickExercise(row) {
   pickedExercise = row
   $('exercise-list').classList.add('hidden')
   $('exercise-config').classList.remove('hidden')
   $('picked-name').textContent = row.name
+
+  // Animated form demo: the authored guide when one exists, the pattern
+  // demo otherwise. Every menu entry has one or the other.
+  pickedDemo?.destroy()
+  pickedDemo = null
+  const demoBox = $('picked-demo')
+  demoBox.innerHTML = ''
+  const demo = demoForExercise(row)
+  if (demo && mountAnimation) {
+    const spec = demo.movement ? { ...demo.movement.anim, name: demo.movement.name } : demo.spec
+    pickedDemo = mountAnimation(demoBox, spec)
+    if (demo.movement) {
+      const link = document.createElement('button')
+      link.type = 'button'
+      link.className = 'demo-guide-link'
+      link.textContent = 'Open the full form guide'
+      link.addEventListener('click', () => openMovement(demo.movement))
+      demoBox.appendChild(link)
+    }
+  }
+
+  const burn = $('picked-burn')
+  burn.textContent = row.kind === 'cardio'
+    ? (row.met && state.profile ? `~${Math.max(1, Math.round((row.met - 1) * state.profile.weightKg * (20 / 60)))} kcal per 20 min for you` : '')
+    : (row.kcalPerSet ? `~${row.kcalPerSet} kcal per set for you (MET ${row.met})` : '')
+
   const tiers = row.tiers
   $('picked-muscles').innerHTML = tiers
     ? [['Primary', tiers.primary], ['Secondary', tiers.secondary], ['Also works', tiers.tertiary]]
@@ -1538,6 +1644,8 @@ function pickExercise(row) {
 }
 
 $('picked-back').addEventListener('click', () => {
+  pickedDemo?.destroy()
+  pickedDemo = null
   $('exercise-config').classList.add('hidden')
   $('exercise-list').classList.remove('hidden')
 })
@@ -1554,18 +1662,45 @@ $('pk-effort').addEventListener('click', (event) => {
  * have typed — so one parsing pipeline handles menu picks and free text
  * alike, and the preview shows exactly what will be stored.
  */
-$('picked-add').addEventListener('click', () => {
+$('picked-add').addEventListener('click', async () => {
   if (!pickedExercise) return
+  const cleanName = pickedExercise.name.replace(/\s*\(.*?\)\s*/g, ' ').trim()
+  const sets = Math.max(1, Number($('pk-sets').value) || 3)
+  const reps = Math.max(1, Number($('pk-reps').value) || 10)
+  const weight = Number($('pk-weight').value)
+
+  // Session mode: the pick becomes a row in the Plan screen's live session.
+  if (pickerMode === 'session' && pickedExercise.kind !== 'cardio') {
+    sessionRows.push({ name: pickedExercise.name, sets, reps, weightKg: weight || null, logged: false })
+    renderSessionRows()
+    $('exercise-sheet').classList.add('hidden')
+    toast(`${pickedExercise.name} added to the session.`)
+    return
+  }
+
+  // Plan-edit mode: the pick is stored on the plan session permanently.
+  if (pickerMode.startsWith('plan-edit:') && pickedExercise.kind !== 'cardio') {
+    const skey = pickerMode.slice('plan-edit:'.length)
+    await savePlanEdit(skey, (edit) => {
+      const lower = pickedExercise.name.toLowerCase()
+      if (edit.removed.some((n) => n.toLowerCase() === lower)) {
+        edit.removed = edit.removed.filter((n) => n.toLowerCase() !== lower)
+      } else if (!edit.added.some((a) => a.name.toLowerCase() === lower)) {
+        edit.added.push({ name: pickedExercise.name })
+      }
+    })
+    $('exercise-sheet').classList.add('hidden')
+    toast(`${pickedExercise.name} added to the plan.`)
+    return
+  }
+
   let phrase
   if (pickedExercise.kind === 'cardio') {
     const minutes = Math.max(1, Number($('pk-minutes').value) || 20)
     const effort = document.querySelector('#pk-effort button[aria-pressed="true"]')?.dataset.effort || ''
-    phrase = `${pickedExercise.name.replace(/\s*\(.*?\)\s*/g, ' ').trim()} ${minutes} min${effort ? ` ${effort}` : ''}`
+    phrase = `${cleanName} ${minutes} min${effort ? ` ${effort}` : ''}`
   } else {
-    const sets = Math.max(1, Number($('pk-sets').value) || 3)
-    const reps = Math.max(1, Number($('pk-reps').value) || 10)
-    const weight = Number($('pk-weight').value)
-    phrase = `${pickedExercise.name.replace(/\s*\(.*?\)\s*/g, ' ').trim()} ${sets}x${reps}${weight ? ` ${weight}kg` : ''}`
+    phrase = `${cleanName} ${sets}x${reps}${weight ? ` ${weight}kg` : ''}`
   }
 
   if (state.kind !== 'workout') {
@@ -1581,6 +1716,154 @@ $('picked-add').addEventListener('click', () => {
   toast(`${pickedExercise.name} added — Log it when the set list is complete.`)
   previewParse()
 })
+
+// ------------------------------------------- Plan screen: live session card
+
+let sessionRows = [] // [{name, sets, reps, weightKg, logged}]
+
+async function loadPlanSession() {
+  // A recommendation carried over (from Body or the recommend button) wins.
+  if (state.sessionOverride) {
+    $('session-title').textContent = state.sessionOverride.title
+    $('session-sub').textContent = 'Built from what your week has been missing. Tweak it, then log as you go.'
+    sessionRows = state.sessionOverride.exercises.map((e) => ({
+      name: e.name, sets: e.sets || 3, reps: parseInt(e.reps, 10) || 10, weightKg: null, logged: false,
+    }))
+    state.sessionOverride = null
+    renderSessionRows()
+    return
+  }
+  try {
+    const data = await api(`/plan-day?date=${state.today}`)
+    const lift = data?.day?.blocks?.find((b) => b.key === 'lift')
+    if (lift?.exercises?.length) {
+      $('session-title').textContent = lift.title
+      $('session-sub').textContent =
+        `${data.day.planName} · week ${data.day.week}. Enter your reps and weight, log each lift as you rack it.`
+      sessionRows = lift.exercises.map((e) => ({
+        name: e.name, sets: e.sets || 3, reps: parseInt(e.reps, 10) || 10, weightKg: null,
+        logged: !!lift.entryId,
+      }))
+    } else {
+      $('session-title').textContent = 'Today’s session'
+      $('session-sub').textContent = data?.plan
+        ? 'Rest day on the plan. Build a session from the menu, or ask for a recommendation.'
+        : 'No plan attached. Build a session from the menu, or ask for a recommendation.'
+      sessionRows = []
+    }
+  } catch {
+    sessionRows = []
+  }
+  renderSessionRows()
+}
+
+function renderSessionRows() {
+  const box = $('session-rows')
+  if (!sessionRows.length) {
+    box.innerHTML = '<p class="empty">Nothing queued. Add exercises or hit Recommend.</p>'
+    return
+  }
+  box.innerHTML = ''
+  sessionRows.forEach((row, index) => {
+    const div = document.createElement('div')
+    div.className = `session-row${row.logged ? ' done' : ''}`
+    div.innerHTML = `
+      <button type="button" class="session-name" title="Show me how">${escapeHtml(row.name)}</button>
+      <input type="number" class="s-sets" min="1" max="10" value="${row.sets}" inputmode="numeric" aria-label="Sets">
+      <span class="s-x">×</span>
+      <input type="number" class="s-reps" min="1" max="100" value="${row.reps}" inputmode="numeric" aria-label="Reps">
+      <input type="number" class="s-kg" min="0" max="500" step="0.5" inputmode="decimal" placeholder="kg"
+        ${row.weightKg ? `value="${row.weightKg}"` : ''} aria-label="Weight in kg">
+      <button type="button" class="btn small s-log"${row.logged ? ' disabled' : ''}>${row.logged ? 'Logged ✓' : 'Log'}</button>
+      <button type="button" class="s-del" aria-label="Remove ${escapeHtml(row.name)}">✕</button>`
+    div.querySelector('.s-sets').addEventListener('change', (e) => { row.sets = Math.max(1, Number(e.target.value) || row.sets) })
+    div.querySelector('.s-reps').addEventListener('change', (e) => { row.reps = Math.max(1, Number(e.target.value) || row.reps) })
+    div.querySelector('.s-kg').addEventListener('change', (e) => { row.weightKg = Number(e.target.value) || null })
+    div.querySelector('.s-log').addEventListener('click', () => logSessionRow(index))
+    div.querySelector('.s-del').addEventListener('click', () => { sessionRows.splice(index, 1); renderSessionRows() })
+    div.querySelector('.session-name').addEventListener('click', () => openGuideOrDemo(row.name))
+    box.appendChild(div)
+  })
+}
+
+function sessionPhrase(row) {
+  return `${row.name.replace(/\s*\(.*?\)\s*/g, ' ').trim()} ${row.sets}x${row.reps}${row.weightKg ? ` ${row.weightKg}kg` : ''}`
+}
+
+async function logSessionRow(index) {
+  const row = sessionRows[index]
+  try {
+    await api('/entries', {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'workout', date: state.today, text: sessionPhrase(row) }),
+    })
+    row.logged = true
+    renderSessionRows()
+    toast(`${row.name} logged. Next.`)
+    if (state.date === state.today) loadDay()
+  } catch (error) { toast(error.message, true) }
+}
+
+$('session-log-all').addEventListener('click', async () => {
+  const remaining = sessionRows.filter((r) => !r.logged)
+  if (!remaining.length) { toast('Everything is already logged.'); return }
+  try {
+    await api('/entries', {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'workout', date: state.today, text: remaining.map(sessionPhrase).join(', ') }),
+    })
+    sessionRows.forEach((r) => { r.logged = true })
+    renderSessionRows()
+    toast(`${remaining.length} lift${remaining.length === 1 ? '' : 's'} logged.`)
+    if (state.date === state.today) loadDay()
+  } catch (error) { toast(error.message, true) }
+})
+
+$('session-add').addEventListener('click', () => openExercisePicker('session'))
+
+$('session-recommend').addEventListener('click', async () => {
+  try {
+    const rec = await api('/recommend-workout')
+    if (!rec.exercises.length) { toast('Nothing is lacking this week — train what you enjoy.'); return }
+    state.sessionOverride = { title: 'Recommended — what’s lacking', exercises: rec.exercises }
+    await loadPlanSession()
+  } catch (error) { toast(error.message, true) }
+})
+
+/** Form help for a name: the authored guide, else the pattern demo. */
+async function openGuideOrDemo(name) {
+  await guideReady
+  const movement = findMovement(name)
+  if (movement) { openMovement(movement); return }
+  const menu = await ensureExerciseMenu()
+  const row = menu?.exercises.find((e) => e.name.toLowerCase() === name.toLowerCase())
+    || menu?.exercises.find((e) => name.toLowerCase().includes(e.name.toLowerCase()))
+  const demo = row && demoForExercise(row)
+  if (!demo) return
+  if (demo.movement) { openMovement(demo.movement); return }
+  $('move-name').textContent = row.name
+  $('move-muscles').textContent = Object.entries(row.muscles || {})
+    .filter(([, share]) => share === 1).map(([m]) => m.replace(/_/g, ' ')).join(', ')
+  moveAnim?.destroy()
+  $('move-anim').innerHTML = ''
+  moveAnim = mountAnimation($('move-anim'), { ...demo.spec, name: row.name })
+  $('move-body').innerHTML = ''
+  $('move-sheet').classList.remove('hidden')
+}
+
+/** Mutate one session's plan edit and persist it to the profile. */
+async function savePlanEdit(skey, mutate) {
+  const edits = JSON.parse(JSON.stringify(state.profile?.planEdits || {}))
+  const edit = (edits[skey] ||= { removed: [], added: [] })
+  mutate(edit)
+  if (!edit.removed.length && !edit.added.length) delete edits[skey]
+  try {
+    const { profile } = await api('/profile', { method: 'PUT', body: JSON.stringify({ planEdits: edits }) })
+    state.profile = profile
+    await loadPlanOverview()
+    await loadPlanSession()
+  } catch (error) { toast(error.message, true) }
+}
 
 // ------------------------------------------------------------------ pantry
 

@@ -654,3 +654,113 @@ nav.tabs button[aria-current='true'] { color: var(--accent); font-weight: 600; }
 @media (min-width: 980px) { .toast { bottom: 30px; } }
 
 .spinner { color: var(--muted); font-size: 0.85rem; padding: 10px 0; }
+
+/* ------------------------------------------------------------------- plan */
+
+.plan-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.plan-week {
+  color: var(--accent);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.plan-note { color: var(--muted); font-size: 0.84rem; margin: 2px 0 10px; }
+
+.plan-block {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+.plan-block:first-child { border-top: 0; }
+.plan-block.done .plan-title { color: var(--muted); }
+.plan-block.optional .plan-title::after { content: ''; }
+.plan-block-body { min-width: 0; }
+
+.plan-slot {
+  display: inline-block;
+  color: var(--faint);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.plan-title { font-size: 0.95rem; font-weight: 600; }
+.plan-detail { color: var(--muted); font-size: 0.8rem; margin-top: 3px; }
+.plan-detail.faint { color: var(--faint); }
+.plan-detail b { color: var(--text); font-weight: 600; }
+
+.plan-ex { list-style: none; margin: 8px 0 0; padding: 0; }
+.plan-ex li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 0;
+  border-top: 1px dashed var(--border);
+  font-size: 0.84rem;
+}
+.plan-ex li:first-child { border-top: 0; }
+.plan-ex-spec { color: var(--accent); font-size: 0.76rem; white-space: nowrap; }
+.plan-ex-note { flex-basis: 100%; color: var(--faint); font-size: 0.74rem; }
+
+.plan-confirm { flex: none; margin-top: 14px; }
+.plan-confirm.confirmed {
+  border-color: var(--good);
+  background: var(--good-soft);
+  color: var(--good);
+}
+.plan-confirm .ico { width: 14px; height: 14px; }
+
+/* Plan overview view */
+.plan-phase {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  margin-bottom: 14px;
+}
+.plan-phase.now { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-soft); }
+.plan-phase-head { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+.plan-phase-n { font-size: 1.7rem; color: var(--accent); }
+.plan-phase-name { font-weight: 650; font-size: 1.02rem; }
+.plan-phase-weeks { color: var(--muted); font-size: 0.78rem; }
+.plan-phase-dates { color: var(--faint); }
+.tag-now {
+  display: inline-block;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 99px;
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  margin-left: 6px;
+  vertical-align: 2px;
+}
+.plan-sessions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.plan-session {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  padding: 12px;
+}
+.plan-session-title { font-size: 0.8rem; font-weight: 650; margin-bottom: 6px; }
+.plan-session ul { list-style: none; margin: 0; padding: 0; }
+.plan-session li {
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding: 3px 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}

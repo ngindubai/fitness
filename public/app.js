@@ -151,7 +151,7 @@ $('logout').addEventListener('click', async () => {
 
 // -------------------------------------------------------------- navigation
 
-const VIEWS = ['today', 'coach', 'stats', 'meals', 'you']
+const VIEWS = ['today', 'plan', 'coach', 'stats', 'meals', 'you']
 
 document.querySelectorAll('nav.tabs button, .side-nav button').forEach((button) => {
   button.addEventListener('click', () => showView(button.dataset.view))
@@ -163,6 +163,7 @@ function showView(view) {
   document.querySelectorAll('nav.tabs button, .side-nav button').forEach((button) => {
     button.setAttribute('aria-current', String(button.dataset.view === view))
   })
+  if (view === 'plan') loadPlanOverview()
   if (view === 'coach') loadReview()
   if (view === 'stats') loadStats()
   if (view === 'meals') loadRecommendations()
@@ -527,6 +528,187 @@ async function loadDay() {
   renderWater(day)
   renderEntries(data.entries)
   state.lastLoggedId = null
+  loadPlanDay().catch(() => {})
+}
+
+// ---------------------------------------------------------------- the plan
+
+async function loadPlanDay() {
+  const card = $('plan-card')
+  if (!state.profile?.planId) { card.classList.add('hidden'); return }
+  const data = await api(`/plan-day?date=${state.date}`)
+  if (!data.plan || !data.day) { card.classList.add('hidden'); return }
+  renderPlanCard(data.day)
+  card.classList.remove('hidden')
+}
+
+function renderPlanCard(day) {
+  const note = $('plan-card-note')
+  const blocks = $('plan-blocks')
+  blocks.innerHTML = ''
+  note.classList.add('hidden')
+
+  if (day.status === 'upcoming') {
+    $('plan-card-title').textContent = day.planName
+    $('plan-card-week').textContent = ''
+    note.textContent = `Starts in ${day.daysUntil} day${day.daysUntil === 1 ? '' : 's'}. The first session is waiting.`
+    note.classList.remove('hidden')
+    return
+  }
+  if (day.status === 'complete') {
+    $('plan-card-title').textContent = day.planName
+    $('plan-card-week').textContent = 'Done'
+    note.textContent = 'The six months are complete. Keep the sessions you liked — that was always the point.'
+    note.classList.remove('hidden')
+    return
+  }
+
+  $('plan-card-title').textContent = day.phase
+    ? `${day.planName} · ${day.phase.name}`
+    : day.planName
+  $('plan-card-week').textContent = [
+    `Week ${day.week}/${day.weeks}`,
+    day.deload ? 'Deload' : null,
+    day.testWeek ? 'Test week' : null,
+  ].filter(Boolean).join(' · ')
+
+  if (day.restNote) {
+    note.textContent = day.restNote
+    note.classList.remove('hidden')
+  }
+
+  for (const block of day.blocks) {
+    blocks.appendChild(renderPlanBlock(block))
+  }
+}
+
+function renderPlanBlock(block) {
+  const wrap = document.createElement('div')
+  wrap.className = `plan-block${block.entryId ? ' done' : ''}${block.optional ? ' optional' : ''}`
+
+  const left = document.createElement('div')
+  left.className = 'plan-block-body'
+  const label = block.kind === 'meal'
+    ? `<span class="plan-slot">${escapeHtml(block.slot)}</span>`
+    : block.key === 'lift' ? '<span class="plan-slot">gym</span>'
+      : block.key === 'steps' ? '<span class="plan-slot">steps</span>'
+        : `<span class="plan-slot">cardio${block.optional ? ' · optional' : ''}</span>`
+  left.innerHTML = `
+    ${label}
+    <div class="plan-title">${escapeHtml(block.title)}</div>
+    ${block.detail ? `<div class="plan-detail">${escapeHtml(block.detail)}</div>` : ''}
+    ${block.desc ? `<div class="plan-detail faint">${escapeHtml(block.desc)}</div>` : ''}
+    ${block.exercises ? `<ul class="plan-ex">${block.exercises.map((e) => `
+      <li><span>${escapeHtml(e.name)}</span><span class="plan-ex-spec">${e.sets} × ${escapeHtml(String(e.reps))}</span>${e.note ? `<span class="plan-ex-note">${escapeHtml(e.note)}</span>` : ''}</li>`).join('')}</ul>` : ''}`
+
+  const action = document.createElement('button')
+  action.className = `btn small plan-confirm${block.entryId ? ' confirmed' : ''}`
+  action.innerHTML = block.entryId
+    ? '<svg class="ico"><use href="#i-check"/></svg> Logged'
+    : block.kind === 'meal' ? 'Ate this' : 'Did it'
+  action.addEventListener('click', async () => {
+    action.disabled = true
+    try {
+      if (block.entryId) {
+        await api(`/entries/${block.entryId}`, { method: 'DELETE' })
+        toast('Unlogged.')
+      } else {
+        await api('/plan-day/confirm', {
+          method: 'POST',
+          body: JSON.stringify({ date: state.date, key: block.key }),
+        })
+        toast(block.kind === 'meal' ? `${block.title} logged.` : 'Logged. Good.')
+      }
+      await loadDay()
+      delete state.calMarks[state.date]
+      await loadCalMarks(state.date.slice(0, 7))
+      renderWeekStrip()
+      syncCalendars()
+    } catch (error) {
+      toast(error.message, true)
+    } finally {
+      action.disabled = false
+    }
+  })
+
+  wrap.appendChild(left)
+  wrap.appendChild(action)
+  return wrap
+}
+
+async function loadPlanOverview() {
+  const container = $('plan-overview')
+  container.innerHTML = '<p class="spinner">Loading…</p>'
+  try {
+    if (!state.profile?.planId) {
+      container.innerHTML = `<div class="card"><h2>No plan attached</h2>
+        <p class="hint">Pick a plan under You → Training plan and the full six months appears here,
+        day by day, with confirm buttons on the Today screen.</p></div>`
+      return
+    }
+    const data = await api('/plan-overview')
+    if (!data.plan) {
+      container.innerHTML = '<div class="card"><p class="empty">No plan attached to this profile.</p></div>'
+      return
+    }
+    renderPlanOverview(container, data)
+  } catch (error) {
+    container.innerHTML = `<div class="card"><p class="empty">${escapeHtml(error.message)}</p></div>`
+  }
+}
+
+function renderPlanOverview(container, { plan, startDate, endDate, currentWeek }) {
+  const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  const gymLabel = plan.gymDays.map((d) => dayNames[d]).join(' / ')
+
+  const phaseCards = plan.phases.map((phase) => {
+    const isNow = currentWeek && currentWeek >= phase.weeks[0] && currentWeek <= phase.weeks[1]
+    const dates = phase.from ? `<span class="plan-phase-dates">${fmtDate(phase.from, { day: 'numeric', month: 'short' })} – ${fmtDate(phase.to, { day: 'numeric', month: 'short' })}</span>` : ''
+    return `
+      <div class="plan-phase${isNow ? ' now' : ''}">
+        <div class="plan-phase-head">
+          <span class="plan-phase-n serif">0${phase.number}</span>
+          <div>
+            <div class="plan-phase-name">${escapeHtml(phase.name)}${isNow ? ' <span class="tag-now">You are here</span>' : ''}</div>
+            <div class="plan-phase-weeks">Weeks ${phase.weeks[0]}–${phase.weeks[1]} ${dates}</div>
+          </div>
+        </div>
+        <p class="plan-detail">${escapeHtml(phase.focus)}</p>
+        <p class="plan-detail faint">${phase.scheme.sets} sets × ${escapeHtml(phase.scheme.reps)} · ${escapeHtml(phase.scheme.effort)} · rest ${escapeHtml(phase.scheme.rest)}</p>
+        <div class="plan-sessions">
+          ${phase.sessions.map((s) => `
+            <div class="plan-session">
+              <div class="plan-session-title">${escapeHtml(s.title)}</div>
+              <ul>${s.exercises.map((e) => `<li>${escapeHtml(e.name)}</li>`).join('')}</ul>
+            </div>`).join('')}
+        </div>
+        ${phase.cardio.length ? `<p class="plan-detail"><b>Cardio:</b> ${phase.cardio.map((c) => escapeHtml(c.title)).join(' · ')}</p>` : ''}
+      </div>`
+  }).join('')
+
+  const mealCols = ['breakfast', 'lunch', 'dinner', 'snack'].map((slot) => `
+    <div class="plan-session">
+      <div class="plan-session-title">${slot[0].toUpperCase()}${slot.slice(1)}</div>
+      <ul>${plan.meals[slot].map((m) => `<li>${escapeHtml(m.name)} <span class="plan-ex-spec">${m.kcal} kcal · ${m.protein}g P</span></li>`).join('')}</ul>
+    </div>`).join('')
+
+  container.innerHTML = `
+    <div class="card">
+      <h2 class="serif" style="font-size:1.5rem">${escapeHtml(plan.name)}</h2>
+      <p class="plan-detail">${plan.weeks} weeks · gym ${gymLabel} · ${plan.stepsTarget.toLocaleString()} steps a day ·
+        ${plan.kcal.toLocaleString()} kcal · ${plan.macros.protein} g protein / ${plan.macros.carbs} g carbs / ${plan.macros.fat} g fat</p>
+      ${startDate ? `<p class="plan-detail faint">${fmtDate(startDate, { day: 'numeric', month: 'long', year: 'numeric' })} → ${fmtDate(endDate, { day: 'numeric', month: 'long', year: 'numeric' })}${currentWeek ? ` · week ${currentWeek} of ${plan.weeks}` : ''} · deloads on weeks ${plan.deloadWeeks.join(', ')} · test week ${plan.testWeek}</p>` : ''}
+    </div>
+    ${phaseCards}
+    <div class="card">
+      <h2>The meal bank</h2>
+      <p class="hint">Each day the plan deals you one from each column — swap within a column freely, the numbers stay honest.</p>
+      <div class="plan-sessions">${mealCols}</div>
+    </div>
+    <div class="card">
+      <h2>House rules</h2>
+      ${plan.rules.map((r) => `<div class="finding note">${escapeHtml(r)}</div>`).join('')}
+    </div>`
 }
 
 function renderBars(day) {
@@ -661,7 +843,12 @@ function renderEntryDetail(entry, kind) {
     const row = document.createElement('div')
     row.className = 'detail-item'
 
-    if (kind === 'meal') {
+    if (kind === 'meal' && item.fromPlan) {
+      // Plan meals are fixed recipes; there is no gram figure to adjust.
+      row.innerHTML = `
+        <span>${escapeHtml(item.name)}<span class="meta" style="display:block">${item.kcal} kcal · ${item.protein}g P · from the plan</span></span>
+        <span></span><span class="meta"></span>`
+    } else if (kind === 'meal') {
       const portion = item.portion ? ` · ~${item.portion.count} ${item.portion.unit}` : ''
       row.innerHTML = `
         <span>${escapeHtml(item.name)}<span class="meta" style="display:block">${item.kcal} kcal · ${item.protein}g P${portion}</span></span>
@@ -1056,6 +1243,10 @@ async function loadProfile() {
   $('p-goal').value = profile.goal
   $('p-climate').innerHTML = Object.entries(options.climates || {}).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')
   $('p-climate').value = profile.climate || 'hot'
+  $('p-plan').innerHTML = '<option value="">None</option>' +
+    (options.plans || []).map((p) => `<option value="${p.id}">${p.name} (${p.owner})</option>`).join('')
+  $('p-plan').value = profile.planId || ''
+  $('p-plan-start').value = profile.planStart || ''
 
   renderTargetSummary(targets)
 }
@@ -1083,6 +1274,8 @@ $('profile-form').addEventListener('submit', async (event) => {
         rateKgPerWeek: Number($('p-rate').value),
         timezone: $('p-timezone').value,
         climate: $('p-climate').value,
+        planId: $('p-plan').value || null,
+        planStart: $('p-plan-start').value || null,
       }),
     })
     state.profile = profile

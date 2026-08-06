@@ -9,6 +9,7 @@
  */
 
 import { activityKcal } from './parse.js'
+import { PLANS } from './data/plans.js'
 
 /**
  * Baseline activity multipliers applied to BMR. These deliberately describe
@@ -49,6 +50,8 @@ export const DEFAULT_PROFILE = {
   timezone: 'Asia/Dubai',
   climate: 'hot',
   proteinPerKg: null, // null = derive from goal
+  planId: null,       // structured six-month plan, if following one
+  planStart: null,    // ISO date the plan began (ideally a Monday)
 }
 
 /**
@@ -165,15 +168,24 @@ export function targetsFor(p, exerciseKcal = 0) {
 
   const carbs = Math.max(0, Math.round((calories - protein * 4 - fat * 9) / 4))
 
+  // A structured plan prescribes fixed daily numbers; when one is active it
+  // overrides the derived targets, because eating to the plan IS the goal.
+  const plan = p.planId ? PLANS[p.planId] : null
+  const finalCalories = plan ? plan.kcal : calories
+  const finalProtein = plan ? plan.macros.protein : protein
+  const finalFat = plan ? plan.macros.fat : fat
+  const finalCarbs = plan ? plan.macros.carbs : carbs
+
   // 14 g fibre per 1000 kcal is the standard population recommendation.
-  const fibre = Math.round((calories / 1000) * 14)
+  const fibre = Math.round((finalCalories / 1000) * 14)
 
   return {
-    calories,
-    protein,
-    carbs,
-    fat,
+    calories: finalCalories,
+    protein: finalProtein,
+    carbs: finalCarbs,
+    fat: finalFat,
     fibre,
+    plan: plan ? { id: plan.id, name: plan.name } : null,
     maintenance: Math.round(maintenance),
     baseline: base,
     exerciseKcal: Math.round(exerciseKcal),

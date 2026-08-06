@@ -38,6 +38,8 @@
     <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="M9.5 5.5 16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M15.5 8.5v-2a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+    <symbol id="i-plan" viewBox="0 0 24 24"><rect x="4.5" y="4.5" width="15" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M9 3v3M15 3v3M8.5 10.5h7M8.5 14h7M8.5 17.5h4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.6 4.6L19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   </defs>
 </svg>
 
@@ -75,6 +77,7 @@
     </div>
     <nav class="side-nav" aria-label="Sections">
       <button data-view="today"><svg class="ico"><use href="#i-today"/></svg>Today</button>
+      <button data-view="plan"><svg class="ico"><use href="#i-plan"/></svg>Plan</button>
       <button data-view="coach"><svg class="ico"><use href="#i-coach"/></svg>Coach</button>
       <button data-view="stats"><svg class="ico"><use href="#i-stats"/></svg>Stats</button>
       <button data-view="meals"><svg class="ico"><use href="#i-meals"/></svg>Meals</button>
@@ -127,6 +130,15 @@
         <div class="bars" id="bars"></div>
       </div>
 
+      <div class="card plan-card hidden" id="plan-card">
+        <div class="plan-head">
+          <h2><svg class="ico"><use href="#i-plan"/></svg> <span id="plan-card-title">The plan today</span></h2>
+          <span class="plan-week" id="plan-card-week"></span>
+        </div>
+        <p class="plan-note hidden" id="plan-card-note"></p>
+        <div id="plan-blocks"></div>
+      </div>
+
       <div class="card water">
         <div class="water-head">
           <h2><svg class="ico"><use href="#i-drop"/></svg> Hydration</h2>
@@ -169,6 +181,11 @@
         <h2>Today's log</h2>
         <div id="entries"></div>
       </div>
+    </section>
+
+    <!-- ========================================================== PLAN -->
+    <section id="view-plan" class="hidden">
+      <div id="plan-overview"><p class="spinner">Loading…</p></div>
     </section>
 
     <!-- ========================================================= COACH -->
@@ -264,6 +281,10 @@
             <div class="field"><label for="p-climate">Climate</label><select id="p-climate"></select></div>
             <div class="field"><label for="p-timezone">Timezone</label><input id="p-timezone" type="text"></div>
           </div>
+          <div class="grid-2">
+            <div class="field"><label for="p-plan">Training plan</label><select id="p-plan"><option value="">None</option></select></div>
+            <div class="field"><label for="p-plan-start">Plan started (a Monday)</label><input id="p-plan-start" type="date"></div>
+          </div>
           <button class="btn primary" style="width:100%" type="submit">Save</button>
         </form>
         <p class="hint" id="targets-summary"></p>
@@ -276,6 +297,7 @@
 
     <nav class="tabs only-mobile" aria-label="Sections">
       <button data-view="today"><svg class="ico"><use href="#i-today"/></svg><span>Today</span></button>
+      <button data-view="plan"><svg class="ico"><use href="#i-plan"/></svg><span>Plan</span></button>
       <button data-view="coach"><svg class="ico"><use href="#i-coach"/></svg><span>Coach</span></button>
       <button data-view="stats"><svg class="ico"><use href="#i-stats"/></svg><span>Stats</span></button>
       <button data-view="meals"><svg class="ico"><use href="#i-meals"/></svg><span>Meals</span></button>

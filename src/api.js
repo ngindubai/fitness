@@ -12,6 +12,8 @@ import { recommendMeals, suggestDay, buildTasteProfile } from './recommend.js'
 import { FOODS, FOODS_BY_ID } from './data/foods.js'
 import { ACTIVITIES } from './data/activities.js'
 import { issueToken, verifyToken, checkPasscode, extractToken, sessionCookie, clearedCookie, hashPasscode, verifyPasscodeHash } from './auth.js'
+import { planForDate, itemsForBlock, planOverview } from './plan.js'
+import { PLANS, PLAN_LIST } from './data/plans.js'
 import { aiReview, aiMealIdeas, isAiConfigured } from './ai.js'
 
 // ------------------------------------------------------------------- helpers
@@ -185,7 +187,7 @@ export async function handleApi(request, ctx) {
       return json({
         profile,
         targets: targetsFor(profile, 0),
-        options: { baselines: BASELINE_LEVELS, goals: GOALS, climates: CLIMATES },
+        options: { baselines: BASELINE_LEVELS, goals: GOALS, climates: CLIMATES, plans: PLAN_LIST },
         today,
       })
     }
@@ -317,6 +319,70 @@ export async function handleApi(request, ctx) {
       const updated = await store.updateEntry(userId, id, patch)
       return json({ entry: updated })
     }
+  }
+
+  // ---------------------------------------------------------------- the plan
+  if (path === '/plan-day' && method === 'GET') {
+    if (!profile.planId || !PLANS[profile.planId]) return json({ plan: null })
+    const date = isValidDate(url.searchParams.get('date')) ? url.searchParams.get('date') : today
+    const day = planForDate(profile.planId, profile.planStart || today, date)
+    if (!day) return json({ plan: null })
+
+    // A block is "done" when an entry item carries its plan key.
+    const entries = await store.listEntries(userId, date, date)
+    const done = {}
+    for (const entry of entries) {
+      for (const item of entry.items || []) {
+        if (item.planKey) done[item.planKey] = entry.id
+      }
+    }
+    day.blocks = day.blocks.map((block) => {
+      const planKey = `${date}:${block.key}`
+      return { ...block, planKey, entryId: done[planKey] || null }
+    })
+    return json({ plan: { id: profile.planId }, date, day })
+  }
+
+  if (path === '/plan-day/confirm' && method === 'POST') {
+    if (!profile.planId || !PLANS[profile.planId]) return error(400, 'No plan is active on this profile.')
+    const body = await readJson(request)
+    const date = isValidDate(body?.date) ? body.date : today
+    const key = String(body?.key || '')
+
+    const day = planForDate(profile.planId, profile.planStart || today, date)
+    if (!day || day.status !== 'active') return error(400, 'The plan is not active on that date.')
+    const block = day.blocks.find((b) => b.key === key)
+    if (!block) return error(404, 'No such block on that day.')
+
+    const planKey = `${date}:${key}`
+    const existing = await store.listEntries(userId, date, date)
+    for (const entry of existing) {
+      if ((entry.items || []).some((item) => item.planKey === planKey)) {
+        return json({ entry, already: true })
+      }
+    }
+
+    const plan = PLANS[profile.planId]
+    let items = itemsForBlock(plan, block).map((item) => ({ ...item, planKey }))
+    items = block.kind === 'meal' ? decorateFoodItems(items) : decorateWorkoutItems(items, profile)
+
+    const entry = {
+      id: newId(),
+      date,
+      kind: block.kind,
+      slot: block.kind === 'meal' ? block.slot : null,
+      raw: `Plan · ${block.title}`,
+      items,
+      value: null,
+      createdAt: new Date().toISOString(),
+    }
+    await store.addEntry(userId, entry)
+    return json({ entry }, { status: 201 })
+  }
+
+  if (path === '/plan-overview' && method === 'GET') {
+    if (!profile.planId || !PLANS[profile.planId]) return json({ plan: null })
+    return json(planOverview(profile.planId, profile.planStart, today))
   }
 
   // --------------------------------------------------------------------- day
@@ -551,5 +617,7 @@ function sanitiseProfile(input) {
     timezone: String(input.timezone || DEFAULT_PROFILE.timezone).slice(0, 64),
     climate: input.climate in CLIMATES ? input.climate : DEFAULT_PROFILE.climate,
     proteinPerKg: input.proteinPerKg ? clamp(input.proteinPerKg, 1.0, 3.5, null) : null,
+    planId: input.planId && PLANS[input.planId] ? input.planId : null,
+    planStart: isValidDate(input.planStart) ? input.planStart : null,
   }
 }

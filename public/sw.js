@@ -1,76 +1,31 @@
 /**
- * Service worker.
+ * Service worker — deliberately a janitor, nothing more.
  *
- * Its only job is to make the app installable and to keep the shell loading
- * when the phone has no signal. API requests are never cached — a stale
- * calorie total is worse than an error message.
+ * Earlier versions intercepted fetches to serve a cached shell offline.
+ * That interception is how a phone ended up with a permanent white screen:
+ * Cloudflare 307-redirects /index.html to /, Chrome refuses redirected
+ * responses for navigations, and a cached wrong response meant every load
+ * failed before a single byte of HTML ran. An offline shell is worthless
+ * for an app whose every screen needs the API anyway, so the trade is made
+ * the other way now:
  *
- * Hard-learned rules baked in here:
- * - Cloudflare serves "/index.html" as a 307 redirect to "/", and Chrome
- *   refuses redirected responses for page navigations (a blank white page).
- *   So the shell caches "/" only, and only clean 200s are ever stored.
- * - A failed asset request must NEVER fall back to HTML: serving index.html
- *   where app.js was expected is a syntax error and a dead app.
- * - Only same-version assets may be cached together, or a mixed old/new
- *   index.html + app.js pair crashes on missing elements. The cache name is
- *   versioned and old caches are dropped on activate.
+ * - NO fetch handler. Requests go straight to the network, always. No cache
+ *   can ever sit between the browser and a page load again.
+ * - On activation it deletes every cache older versions left behind, which
+ *   is what rescues any phone still stuck on a poisoned cache: the browser
+ *   update-checks this file on navigation, sees new bytes, installs it, and
+ *   the old broken worker is gone.
  */
 
-const CACHE = 'fitness-shell-v7'
-const SHELL = ['/', '/app.js', '/movements.js', '/anim.js', '/styles.css', '/icon.svg', '/manifest.webmanifest']
-
-/** Only clean, non-redirected 200s are worth keeping. */
-const cacheable = (response) =>
-  response && response.ok && !response.redirected && (response.type === 'basic' || response.type === 'default')
-
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE)
-      .then(async (cache) => {
-        for (const url of SHELL) {
-          try {
-            const response = await fetch(url, { cache: 'no-cache' })
-            if (cacheable(response)) await cache.put(url, response)
-          } catch { /* a missed shell asset falls back to the network later */ }
-        }
-      })
-      .then(() => self.skipWaiting())
-  )
+self.addEventListener('install', () => {
+  self.skipWaiting()
 })
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
-      .then(() => self.clients.claim())
-  )
-})
-
-self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url)
-  if (url.origin !== location.origin) return
-  if (url.pathname.startsWith('/api/') || event.request.method !== 'GET') return
-
-  // Network first, so a deployed change is picked up immediately; the cache
-  // only answers when the network cannot.
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        if (cacheable(response)) {
-          const copy = response.clone()
-          caches.open(CACHE).then((cache) => cache.put(event.request, copy)).catch(() => {})
-        }
-        return response
-      })
-      .catch(async () => {
-        const cached = await caches.match(event.request, { ignoreSearch: event.request.mode === 'navigate' })
-        if (cached) return cached
-        // Pages may fall back to the cached shell; assets must fail honestly.
-        if (event.request.mode === 'navigate') {
-          const shell = await caches.match('/')
-          if (shell) return shell
-        }
-        return Response.error()
-      })
+    (async () => {
+      for (const key of await caches.keys()) await caches.delete(key)
+      await self.clients.claim()
+    })()
   )
 })

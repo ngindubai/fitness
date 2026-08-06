@@ -26,11 +26,36 @@
  */
 (function () {
   var shown = false
+
+  /* One automatic self-repair per session: throw away every service worker
+     and cache, then reload clean. Fixes a phone stuck on a broken worker
+     without asking anyone to dig through browser settings. */
+  function selfRepair() {
+    try {
+      if (sessionStorage.getItem('ff_repaired')) return false
+      sessionStorage.setItem('ff_repaired', '1')
+    } catch (e) { return false }
+    var jobs = []
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+      jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+        return Promise.all(regs.map(function (reg) { return reg.unregister() }))
+      }))
+    }
+    if (window.caches && caches.keys) {
+      jobs.push(caches.keys().then(function (keys) {
+        return Promise.all(keys.map(function (key) { return caches.delete(key) }))
+      }))
+    }
+    Promise.all(jobs).catch(function () {}).then(function () { location.reload() })
+    return true
+  }
+
   function reveal(message) {
     if (shown) return
     var app = document.getElementById('app')
     var login = document.getElementById('login')
     if (app && !app.classList.contains('hidden')) return // app is up; all fine
+    if (selfRepair()) return // first failure this session: repair and reload
     shown = true
     if (login) login.classList.remove('hidden')
     if (message) {

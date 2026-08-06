@@ -86,6 +86,24 @@ making a second one, and stops without touching anything if you aren't signed
 in. If it can't read the database id automatically it tells you the two
 commands to finish by hand rather than half-completing.
 
+### Automatic deploys
+
+Once it is running, you do not need the command line again. In the Cloudflare
+dashboard: **Workers & Pages → your worker → Settings → Builds → Connect**,
+authorise the GitHub app, and point it at this repository and branch. Every
+push then builds and deploys by itself, on Cloudflare's own builders (3,000
+build minutes a month are included on the free plan).
+
+The worker's name in the dashboard has to match `name` in `wrangler.toml`, or
+the build fails.
+
+A GitHub Actions workflow (`.github/workflows/deploy.yml`) is kept as a manual
+fallback under the repository's Actions tab. It is deliberately not run on
+push: GitHub-hosted runners would not pick up jobs for a newly created account
+here — three runs queued for fifteen minutes with no runner assigned and were
+auto-cancelled before executing a single step — so Cloudflare's own build
+service is the dependable path.
+
 ### Optional secrets
 
 ```bash

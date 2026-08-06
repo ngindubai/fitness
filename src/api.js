@@ -64,7 +64,9 @@ function partition(entries) {
 function decorateFoodItems(items) {
   return items.map((item) => ({
     ...item,
-    tags: item.foodId ? FOODS_BY_ID.get(item.foodId)?.tags || [] : [],
+    // Pantry items carry their own tags from the parser; the static database
+    // is only consulted for its own ids.
+    tags: FOODS_BY_ID.get(item.foodId)?.tags || item.tags || [],
   }))
 }
 
@@ -188,6 +190,14 @@ export async function handleApi(request, ctx) {
     if (date && date < today) await store.deleteReview(userId, date).catch(() => {})
   }
 
+  // The user's scanned/custom products, loaded once per request on the
+  // routes that parse food text, so "my protein bar" resolves to THEIR bar.
+  let pantryCache = null
+  const pantryFoods = async () => {
+    if (!pantryCache) pantryCache = await store.listPantry(userId).catch(() => [])
+    return pantryCache
+  }
+
   // ------------------------------------------------------------------ profile
   if (path === '/profile') {
     if (method === 'GET') {
@@ -210,12 +220,15 @@ export async function handleApi(request, ctx) {
   if (path === '/parse' && method === 'POST') {
     const body = await readJson(request)
     const kind = body?.kind === 'workout' ? 'workout' : 'meal'
-    const withSuggestions = (items, suggest) => items.map((item) =>
-      item.recognised ? item : { ...item, suggestions: suggest(item.raw) })
     if (kind === 'meal') {
-      return json({ kind, items: withSuggestions(decorateFoodItems(parseMeal(body?.text || '')), suggestFoods) })
+      const pantry = await pantryFoods()
+      const items = decorateFoodItems(parseMeal(body?.text || '', pantry)).map((item) =>
+        item.recognised ? item : { ...item, suggestions: suggestFoods(item.raw, 3, pantry) })
+      return json({ kind, items })
     }
-    return json({ kind, items: withSuggestions(decorateWorkoutItems(parseWorkout(body?.text || ''), profile), suggestWorkouts) })
+    const items = decorateWorkoutItems(parseWorkout(body?.text || ''), profile).map((item) =>
+      item.recognised ? item : { ...item, suggestions: suggestWorkouts(item.raw) })
+    return json({ kind, items })
   }
 
   // ----------------------------------------------------------------- entries
@@ -255,7 +268,7 @@ export async function handleApi(request, ctx) {
 
     if (!items) {
       if (!text) return error(400, 'Nothing to log.')
-      items = kind === 'meal' ? parseMeal(text) : parseWorkout(text)
+      items = kind === 'meal' ? parseMeal(text, await pantryFoods()) : parseWorkout(text)
     }
     items = kind === 'meal'
       ? decorateFoodItems(items)
@@ -314,7 +327,7 @@ export async function handleApi(request, ctx) {
       } else if (typeof body?.text === 'string') {
         patch.raw = body.text
         patch.items = existing.kind === 'meal'
-          ? decorateFoodItems(parseMeal(body.text))
+          ? decorateFoodItems(parseMeal(body.text, await pantryFoods()))
           : decorateWorkoutItems(parseWorkout(body.text), profile)
       } else if (body?.reweigh && typeof body.reweigh.index === 'number') {
         // Adjust a single item's portion without re-parsing the whole entry.
@@ -400,6 +413,68 @@ export async function handleApi(request, ctx) {
   if (path === '/plan-overview' && method === 'GET') {
     if (!profile.planId || !PLANS[profile.planId]) return json({ plan: null })
     return json(planOverview(profile.planId, profile.planStart, today))
+  }
+
+  // ------------------------------------------------------------------ pantry
+  if (path === '/pantry' && method === 'GET') {
+    return json({ items: await pantryFoods() })
+  }
+
+  if (path === '/pantry' && method === 'POST') {
+    const body = await readJson(request)
+    const name = String(body?.name || '').trim().slice(0, 80)
+    if (name.length < 2) return error(400, 'Give the product a name.')
+
+    const clamp = (value, max) => {
+      const number = Number(value)
+      return Number.isFinite(number) && number >= 0 ? Math.min(max, Math.round(number * 10) / 10) : 0
+    }
+    const per100 = {
+      kcal: Math.round(clamp(body?.per100?.kcal, 950)),
+      protein: clamp(body?.per100?.protein, 100),
+      carbs: clamp(body?.per100?.carbs, 100),
+      fat: clamp(body?.per100?.fat, 100),
+      fibre: clamp(body?.per100?.fibre, 60),
+      sugar: clamp(body?.per100?.sugar, 100),
+    }
+    if (per100.kcal === 0 && per100.protein === 0 && per100.carbs === 0 && per100.fat === 0) {
+      return error(400, 'At least one nutrition figure is needed.')
+    }
+    // The label's own energy figure wins, but nonsense (macros implying triple
+    // the calories) is rejected rather than stored silently.
+    const macroKcal = per100.protein * 4 + per100.carbs * 4 + per100.fat * 9
+    if (per100.kcal > 0 && macroKcal > per100.kcal * 2.2 + 60) {
+      return error(400, 'Those macros do not fit that calorie figure — check the numbers.')
+    }
+
+    const existing = await pantryFoods()
+    if (existing.length >= 200) return error(403, 'Pantry limit reached (200 items).')
+
+    const brand = String(body?.brand || '').trim().slice(0, 40)
+    const servingG = Math.min(1000, Math.max(1, Math.round(Number(body?.servingG) || 100)))
+    const aliases = [...new Set([
+      name.toLowerCase(),
+      brand ? `${brand.toLowerCase()} ${name.toLowerCase()}` : null,
+    ].filter(Boolean))]
+
+    const item = {
+      id: `custom-${newId()}`,
+      name: brand ? `${name} (${brand})` : name,
+      aliases,
+      per100,
+      unit: { name: 'serving', grams: servingG },
+      tags: ['pantry'],
+      source: body?.source === 'scan' ? 'scan' : 'manual',
+      createdAt: new Date().toISOString(),
+    }
+    await store.addPantryItem(userId, item)
+    return json({ item }, { status: 201 })
+  }
+
+  const pantryMatch = path.match(/^\/pantry\/([\w-]+)$/)
+  if (pantryMatch && method === 'DELETE') {
+    const removed = await store.deletePantryItem(userId, pantryMatch[1])
+    return removed ? json({ ok: true }) : error(404, 'Not in your pantry.')
   }
 
   // --------------------------------------------------------------------- day

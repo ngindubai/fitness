@@ -906,3 +906,11 @@ nav.tabs button[aria-current='true'] { color: var(--accent); font-weight: 600; }
 .move-tile:hover { border-color: var(--accent); color: var(--text); transform: translateY(-1px); }
 .move-tile .move-thumb { width: 100%; }
 .move-tile .fig { max-width: 130px; }
+
+/* ------------------------------------------------------------------ pantry */
+
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+label.btn { display: inline-flex; align-items: center; cursor: pointer; }
+#scan-form { margin-top: 14px; }
+#scan-notes .finding { margin-top: 8px; }
+#pantry-list .ing-row .ghost { margin-left: 6px; }

@@ -178,7 +178,7 @@ $('logout').addEventListener('click', async () => {
 
 // -------------------------------------------------------------- navigation
 
-const VIEWS = ['today', 'plan', 'coach', 'stats', 'meals', 'you']
+const VIEWS = ['today', 'plan', 'coach', 'stats', 'meals', 'pantry', 'you']
 
 document.querySelectorAll('nav.tabs button, .side-nav button').forEach((button) => {
   button.addEventListener('click', () => showView(button.dataset.view))
@@ -193,7 +193,8 @@ function showView(view) {
   if (view === 'plan') loadPlanOverview()
   if (view === 'coach') loadReview()
   if (view === 'stats') loadStats()
-  if (view === 'meals') { loadRecommendations(); loadIngredients() }
+  if (view === 'meals') loadRecommendations()
+  if (view === 'pantry') { loadPantry(); loadIngredients() }
 }
 
 // ------------------------------------------------------------ date + strips
@@ -1345,6 +1346,191 @@ async function loadRecommendations() {
     $('recommendations').innerHTML = `<p class="empty">${escapeHtml(error.message)}</p>`
   }
 }
+
+// ------------------------------------------------------------------ pantry
+
+async function loadPantry() {
+  try {
+    const { items } = await api('/pantry')
+    const list = $('pantry-list')
+    if (!items.length) {
+      list.innerHTML = '<p class="empty">Nothing scanned yet.</p>'
+      return
+    }
+    list.innerHTML = ''
+    for (const item of items) {
+      const row = document.createElement('div')
+      row.className = 'ing-row'
+      row.innerHTML = `
+        <span class="ing-name">${escapeHtml(item.name)}
+          <span class="meta" style="display:block">${item.per100.kcal} kcal · ${item.per100.protein}g P ·
+            ${item.per100.carbs}g C · ${item.per100.fat}g F per 100 g · 1 serving ≈ ${item.unit.grams} g
+            ${item.source === 'scan' ? ' · scanned' : ''}</span>
+        </span>`
+      const add = document.createElement('button')
+      add.className = 'btn small'
+      add.textContent = 'Add'
+      add.addEventListener('click', () => addIngredientToLogger(item))
+      const del = document.createElement('button')
+      del.className = 'btn small ghost'
+      del.setAttribute('aria-label', `Remove ${item.name}`)
+      del.innerHTML = '<svg class="ico" style="width:13px;height:13px"><use href="#i-x"/></svg>'
+      del.addEventListener('click', async () => {
+        await api(`/pantry/${item.id}`, { method: 'DELETE' })
+        loadPantry()
+      })
+      row.appendChild(add)
+      row.appendChild(del)
+      list.appendChild(row)
+    }
+  } catch (error) {
+    $('pantry-list').innerHTML = `<p class="empty">${escapeHtml(error.message)}</p>`
+  }
+}
+
+// --------------------------------------------------------------- label scan
+
+const scanStatus = (text) => {
+  const el = $('scan-status')
+  el.textContent = text
+  el.classList.toggle('hidden', !text)
+}
+
+/**
+ * Read a photographed label entirely on-device: the OCR engine is vendored
+ * WebAssembly served from this site, so nothing leaves the phone.
+ */
+async function scanLabel(file) {
+  scanStatus('Loading the reader (first time takes a few seconds)…')
+  try {
+    const tesseract = await import('/vendor/tesseract/tesseract.esm.min.js')
+    const createWorker = tesseract.createWorker || tesseract.default?.createWorker
+    if (!createWorker) throw new Error('OCR engine failed to load')
+    const worker = await createWorker('eng', 1, {
+      workerPath: '/vendor/tesseract/worker.min.js',
+      corePath: '/vendor/tesseract/',
+      langPath: '/vendor/tesseract',
+      logger: (m) => {
+        if (m.status === 'recognizing text') scanStatus(`Reading the label… ${Math.round(m.progress * 100)}%`)
+      },
+    })
+    // PSM 4 (single column of variable-width lines) keeps each table row
+    // together as one line, which is what the parser wants from a label grid.
+    await worker.setParameters({ tessedit_pageseg_mode: '4' })
+    scanStatus('Reading the label…')
+    const image = await preprocessLabel(file)
+    const { data } = await worker.recognize(image)
+    await worker.terminate()
+
+    const { parseNutritionLabel } = await import('/label-parse.js')
+    const parsed = parseNutritionLabel(data.text)
+    if (parsed.fields === 0) {
+      scanStatus('Could not find nutrition figures in that photo. Get closer, keep the panel flat and well-lit, and try again — or type it in.')
+      openScanForm(null, [])
+      return
+    }
+    scanStatus(`Read ${parsed.fields} of 6 figures. Check them against the label before saving.`)
+    openScanForm(parsed, parsed.notes)
+  } catch (error) {
+    scanStatus(`Scanning failed: ${error.message}. You can type the numbers in instead.`)
+    openScanForm(null, [])
+  }
+}
+
+/**
+ * Resize + grayscale + contrast stretch: cheap, and OCR loves it. The OCR
+ * engine needs characters ~30px tall, so small images are scaled UP as well
+ * as huge phone photos scaled down — both land near 2000px on the long side.
+ */
+async function preprocessLabel(file) {
+  const bitmap = await createImageBitmap(file)
+  const scale = Math.min(3, 2000 / Math.max(bitmap.width, bitmap.height))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(bitmap.width * scale)
+  canvas.height = Math.round(bitmap.height * scale)
+  const ctx = canvas.getContext('2d')
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const px = image.data
+  let min = 255
+  let max = 0
+  for (let i = 0; i < px.length; i += 4) {
+    const grey = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]
+    px[i] = grey
+    if (grey < min) min = grey
+    if (grey > max) max = grey
+  }
+  const range = Math.max(1, max - min)
+  for (let i = 0; i < px.length; i += 4) {
+    const stretched = ((px[i] - min) / range) * 255
+    px[i] = px[i + 1] = px[i + 2] = stretched
+  }
+  ctx.putImageData(image, 0, 0)
+  return canvas
+}
+
+function openScanForm(parsed, notes) {
+  $('scan-form').classList.remove('hidden')
+  $('sc-name').value = ''
+  $('sc-brand').value = ''
+  $('sc-kcal').value = parsed?.per100.kcal ?? ''
+  $('sc-protein').value = parsed?.per100.protein ?? ''
+  $('sc-carbs').value = parsed?.per100.carbs ?? ''
+  $('sc-fat').value = parsed?.per100.fat ?? ''
+  $('sc-fibre').value = parsed?.per100.fibre ?? ''
+  $('sc-sugar').value = parsed?.per100.sugar ?? ''
+  $('sc-serving').value = parsed?.servingG ?? ''
+  $('scan-notes').innerHTML = (notes || [])
+    .map((n) => `<div class="finding warn">${escapeHtml(n)}</div>`).join('')
+  $('sc-name').focus()
+  state.scanSource = parsed ? 'scan' : 'manual'
+}
+
+$('scan-input').addEventListener('change', () => {
+  const file = $('scan-input').files?.[0]
+  if (file) scanLabel(file)
+  $('scan-input').value = ''
+})
+
+$('manual-add').addEventListener('click', () => {
+  scanStatus('')
+  openScanForm(null, [])
+})
+
+$('scan-cancel').addEventListener('click', () => {
+  $('scan-form').classList.add('hidden')
+  scanStatus('')
+})
+
+$('scan-form').addEventListener('submit', async (event) => {
+  event.preventDefault()
+  try {
+    const { item } = await api('/pantry', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: $('sc-name').value,
+        brand: $('sc-brand').value,
+        servingG: Number($('sc-serving').value) || 100,
+        source: state.scanSource,
+        per100: {
+          kcal: Number($('sc-kcal').value) || 0,
+          protein: Number($('sc-protein').value) || 0,
+          carbs: Number($('sc-carbs').value) || 0,
+          fat: Number($('sc-fat').value) || 0,
+          fibre: Number($('sc-fibre').value) || 0,
+          sugar: Number($('sc-sugar').value) || 0,
+        },
+      }),
+    })
+    toast(`${item.name} saved. Log it by typing its name.`)
+    $('scan-form').classList.add('hidden')
+    scanStatus('')
+    loadPantry()
+  } catch (error) {
+    toast(error.message, true)
+  }
+})
 
 // ------------------------------------------------------ ingredient library
 

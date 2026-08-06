@@ -132,15 +132,28 @@ function scoreMatch(phrase, term) {
 
 /**
  * @param {string} phrase
+ * @param {Array} [extras] user's own pantry foods, shaped like static foods.
+ *   They are checked first and win ties, because "protein bar" should mean
+ *   THEIR protein bar once they have scanned one.
  * @returns {{food: import('./data/foods.js').Food, score: number} | null}
  */
-export function matchFood(phrase) {
+export function matchFood(phrase, extras) {
   const cleaned = normalise(phrase)
   if (!cleaned) return null
 
   let best = null
+  if (extras?.length) {
+    for (const food of extras) {
+      for (const term of new Set([food.name.toLowerCase(), ...(food.aliases || [])])) {
+        const score = scoreMatch(cleaned, term)
+        if (score > 0 && (!best || score > best.score)) best = { food, score }
+      }
+    }
+    if (best && best.score === 1) return best
+  }
   for (const { term, food } of ALIAS_INDEX) {
     const score = scoreMatch(cleaned, term)
+    // Strictly greater: on a tie the pantry item already in `best` stays.
     if (score > 0 && (!best || score > best.score)) {
       best = { food, score }
       if (score === 1) break
@@ -171,7 +184,7 @@ export function matchFood(phrase) {
  * Turn one phrase ("2 slices of wholemeal toast") into a weighed food item.
  * @returns {ParsedFoodItem}
  */
-export function parseFoodPhrase(phrase) {
+export function parseFoodPhrase(phrase, extras) {
   const raw = String(phrase).trim()
   let working = normalise(raw)
 
@@ -263,9 +276,9 @@ export function parseFoodPhrase(phrase) {
 
   // Or leading without "of" — but only when the phrase as a whole is NOT
   // already a food ("fillet steak" is a steak, not a fillet of steak).
-  if (quantity === null && explicitGrams === null && !matchFood(working)) {
+  if (quantity === null && explicitGrams === null && !matchFood(working, extras)) {
     const lead = working.match(/^\s*([a-z]+)\s+(.+)$/)
-    if (lead && (PORTION_UNITS.has(lead[1]) || lead[1] in FIXED_UNIT_GRAMS) && matchFood(lead[2])) {
+    if (lead && (PORTION_UNITS.has(lead[1]) || lead[1] in FIXED_UNIT_GRAMS) && matchFood(lead[2], extras)) {
       quantity = 1
       unit = lead[1]
       working = lead[2]
@@ -284,8 +297,8 @@ export function parseFoodPhrase(phrase) {
   // "2 eggs" consumes "eggs" as the unit and leaves nothing to match on, so
   // when the stripped phrase finds nothing, try again with the unit word — for
   // these foods the unit *is* the name.
-  let match = matchFood(working)
-  if (!match && unit) match = matchFood(`${unit} ${working}`)
+  let match = matchFood(working, extras)
+  if (!match && unit) match = matchFood(`${unit} ${working}`, extras)
 
   if (!match) {
     return {
@@ -386,8 +399,10 @@ function pluralise(word) {
  * @param {string} text
  * @returns {ParsedFoodItem[]}
  */
-export function parseMeal(text) {
-  return splitItems(text).map(parseFoodPhrase).filter((item) => item.raw.length > 0)
+export function parseMeal(text, extras) {
+  return splitItems(text)
+    .map((phrase) => parseFoodPhrase(phrase, extras))
+    .filter((item) => item.raw.length > 0)
 }
 
 /** Recompute an item after the user edits its weight in the UI. */
@@ -807,8 +822,15 @@ function suggestFrom(indexEntries, phrase, limit, getId, getName) {
 }
 
 /** Closest foods to an unrecognised phrase — the "did you mean" list. */
-export function suggestFoods(phrase, limit = 3) {
-  return suggestFrom(ALIAS_INDEX, phrase, limit, (e) => e.food.id, (e) => e.food.name)
+export function suggestFoods(phrase, limit = 3, extras) {
+  const index = extras?.length
+    ? [
+        ...extras.flatMap((food) =>
+          [food.name.toLowerCase(), ...(food.aliases || [])].map((term) => ({ term, food }))),
+        ...ALIAS_INDEX,
+      ]
+    : ALIAS_INDEX
+  return suggestFrom(index, phrase, limit, (e) => e.food.id, (e) => e.food.name)
 }
 
 /** Closest activities and lifts to an unrecognised workout phrase. */

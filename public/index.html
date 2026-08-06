@@ -99,6 +99,8 @@
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
     <symbol id="i-plan" viewBox="0 0 24 24"><rect x="4.5" y="4.5" width="15" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M9 3v3M15 3v3M8.5 10.5h7M8.5 14h7M8.5 17.5h4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.6 4.6L19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-pantry" viewBox="0 0 24 24"><path d="M7 3.5h10M8.5 3.5v3h7v-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><rect x="5.5" y="6.5" width="13" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M5.5 12h13" stroke="currentColor" stroke-width="1.4"/><path d="M9.5 9.2h5M9.5 15.5h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 12h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
   </defs>
 </svg>
 
@@ -140,6 +142,7 @@
       <button data-view="coach"><svg class="ico"><use href="#i-coach"/></svg>Coach</button>
       <button data-view="stats"><svg class="ico"><use href="#i-stats"/></svg>Stats</button>
       <button data-view="meals"><svg class="ico"><use href="#i-meals"/></svg>Meals</button>
+      <button data-view="pantry"><svg class="ico"><use href="#i-pantry"/></svg>Pantry</button>
       <button data-view="you"><svg class="ico"><use href="#i-you"/></svg>You</button>
     </nav>
     <button class="theme-toggle" data-theme-toggle aria-label="Switch theme">
@@ -309,18 +312,62 @@
         <div id="recommendations"></div>
       </div>
       <div class="card">
+        <h2>What you actually eat</h2>
+        <div class="chips" id="favourites"></div>
+        <p class="hint" id="taste-hint"></p>
+      </div>
+    </section>
+
+    <!-- ======================================================== PANTRY -->
+    <section id="view-pantry" class="hidden">
+      <div class="card">
+        <h2><svg class="ico"><use href="#i-scan"/></svg> Scan a label</h2>
+        <p class="hint">Photograph the nutrition panel on the back of any product. The text is read
+          on your phone — no cloud, no AI service — and you check the numbers before anything is saved.</p>
+        <div class="actions">
+          <label class="btn primary" for="scan-input">Photograph a label</label>
+          <input id="scan-input" type="file" accept="image/*" capture="environment" class="hidden">
+          <button class="btn ghost" id="manual-add">Type it in instead</button>
+        </div>
+        <p class="hint hidden" id="scan-status"></p>
+
+        <form id="scan-form" class="hidden">
+          <div class="grid-2">
+            <div class="field"><label for="sc-name">Product name</label><input id="sc-name" type="text" required></div>
+            <div class="field"><label for="sc-brand">Brand (optional)</label><input id="sc-brand" type="text"></div>
+          </div>
+          <p class="hint">Per 100 g, exactly as the label prints them:</p>
+          <div class="grid-3">
+            <div class="field"><label for="sc-kcal">kcal</label><input id="sc-kcal" type="number" min="0" max="950" step="1" inputmode="numeric"></div>
+            <div class="field"><label for="sc-protein">Protein g</label><input id="sc-protein" type="number" min="0" max="100" step="0.1" inputmode="decimal"></div>
+            <div class="field"><label for="sc-carbs">Carbs g</label><input id="sc-carbs" type="number" min="0" max="100" step="0.1" inputmode="decimal"></div>
+            <div class="field"><label for="sc-fat">Fat g</label><input id="sc-fat" type="number" min="0" max="100" step="0.1" inputmode="decimal"></div>
+            <div class="field"><label for="sc-fibre">Fibre g</label><input id="sc-fibre" type="number" min="0" max="60" step="0.1" inputmode="decimal"></div>
+            <div class="field"><label for="sc-sugar">Sugars g</label><input id="sc-sugar" type="number" min="0" max="100" step="0.1" inputmode="decimal"></div>
+          </div>
+          <div class="field"><label for="sc-serving">Serving size (g)</label><input id="sc-serving" type="number" min="1" max="1000" step="1" inputmode="numeric"></div>
+          <div id="scan-notes"></div>
+          <div class="actions">
+            <button class="btn primary" type="submit">Save to pantry</button>
+            <button class="btn ghost" type="button" id="scan-cancel">Cancel</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Your products</h2>
+        <p class="hint">Everything you've scanned or added. Log any of them by name — "2 scoops mega whey",
+          "1 serving protein bar" — or tap Add to drop one into the logger.</p>
+        <div id="pantry-list"><p class="empty">Nothing scanned yet.</p></div>
+      </div>
+
+      <div class="card">
         <h2>Ingredient library</h2>
-        <p class="hint">Cooking from scratch? Every raw ingredient here has macros per 100 g.
+        <p class="hint">Every food the app already knows — macros per 100 g.
           Tap <b>Add</b> for each thing that goes in the pan, then set the real weights in the logger preview.</p>
         <div class="field"><input id="ing-search" type="search" autocomplete="off"
           placeholder="flour, garlic, coconut milk, turkey mince…" aria-label="Search ingredients"></div>
         <div id="ing-results"></div>
-      </div>
-
-      <div class="card">
-        <h2>What you actually eat</h2>
-        <div class="chips" id="favourites"></div>
-        <p class="hint" id="taste-hint"></p>
       </div>
     </section>
 
@@ -370,6 +417,7 @@
       <button data-view="coach"><svg class="ico"><use href="#i-coach"/></svg><span>Coach</span></button>
       <button data-view="stats"><svg class="ico"><use href="#i-stats"/></svg><span>Stats</span></button>
       <button data-view="meals"><svg class="ico"><use href="#i-meals"/></svg><span>Meals</span></button>
+      <button data-view="pantry"><svg class="ico"><use href="#i-pantry"/></svg><span>Pantry</span></button>
       <button data-view="you"><svg class="ico"><use href="#i-you"/></svg><span>You</span></button>
     </nav>
   </main>

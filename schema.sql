@@ -41,3 +41,12 @@ CREATE TABLE IF NOT EXISTS reviews (
   created_at TEXT NOT NULL,
   PRIMARY KEY (user_id, date)
 );
+
+-- Scanned and hand-entered products, per user (v3).
+CREATE TABLE IF NOT EXISTS pantry (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  data TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pantry_user ON pantry (user_id);

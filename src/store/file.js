@@ -116,6 +116,32 @@ export class FileStore {
     })
   }
 
+  // --------------------------------------------------------------- pantry
+
+  async listPantry(userId) {
+    const data = await this.#read()
+    return (data.pantry?.[userId] || []).slice().reverse()
+  }
+
+  async addPantryItem(userId, item) {
+    return this.#mutate((data) => {
+      if (!data.pantry) data.pantry = {}
+      if (!data.pantry[userId]) data.pantry[userId] = []
+      data.pantry[userId].push(item)
+      return item
+    })
+  }
+
+  async deletePantryItem(userId, id) {
+    return this.#mutate((data) => {
+      const items = data.pantry?.[userId]
+      if (!items) return false
+      const before = items.length
+      data.pantry[userId] = items.filter((item) => item.id !== id)
+      return data.pantry[userId].length < before
+    })
+  }
+
   // -------------------------------------------------------------- reviews
 
   async getReview(userId, date) {

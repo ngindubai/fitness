@@ -136,6 +136,59 @@ export class D1Store {
     return (result.meta?.changes ?? 0) > 0
   }
 
+  // --------------------------------------------------------------- pantry
+
+  /**
+   * The pantry table creates itself on first use. Deploys are hands-off via
+   * Git integration now, so a schema change must not depend on anyone
+   * remembering to run a migration from a terminal.
+   */
+  async #ensurePantry() {
+    if (this.#pantryReady) return
+    await this.db
+      .prepare(
+        `CREATE TABLE IF NOT EXISTS pantry (
+           id TEXT PRIMARY KEY,
+           user_id TEXT NOT NULL,
+           data TEXT NOT NULL,
+           created_at TEXT NOT NULL
+         )`
+      )
+      .run()
+    await this.db
+      .prepare('CREATE INDEX IF NOT EXISTS idx_pantry_user ON pantry (user_id)')
+      .run()
+    this.#pantryReady = true
+  }
+  #pantryReady = false
+
+  async listPantry(userId) {
+    await this.#ensurePantry()
+    const { results } = await this.db
+      .prepare('SELECT data FROM pantry WHERE user_id = ? ORDER BY created_at DESC')
+      .bind(userId)
+      .all()
+    return (results || []).map((row) => JSON.parse(row.data))
+  }
+
+  async addPantryItem(userId, item) {
+    await this.#ensurePantry()
+    await this.db
+      .prepare('INSERT INTO pantry (id, user_id, data, created_at) VALUES (?, ?, ?, ?)')
+      .bind(item.id, userId, JSON.stringify(item), new Date().toISOString())
+      .run()
+    return item
+  }
+
+  async deletePantryItem(userId, id) {
+    await this.#ensurePantry()
+    const result = await this.db
+      .prepare('DELETE FROM pantry WHERE id = ? AND user_id = ?')
+      .bind(id, userId)
+      .run()
+    return (result.meta?.changes ?? 0) > 0
+  }
+
   // -------------------------------------------------------------- reviews
 
   async getReview(userId, date) {

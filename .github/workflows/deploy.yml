@@ -7,11 +7,12 @@
 #                            right-hand sidebar "Account ID"
 name: Deploy
 
+# NOTE: push-triggered deploys are handled by Cloudflare Workers Builds
+# (the Git integration in the Cloudflare dashboard), because GitHub-hosted
+# runners never picked up jobs for this account — three runs in a row were
+# queued ~15 minutes with no runner assigned, then auto-cancelled. This
+# workflow stays as a manual backup only.
 on:
-  push:
-    branches:
-      - claude/food-fitness-tracker-app-c9ae89
-      - main
   workflow_dispatch:
 
 jobs:

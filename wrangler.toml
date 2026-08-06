@@ -3,18 +3,28 @@ main = "src/worker.js"
 compatibility_date = "2026-01-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Serve on <worker>.<subdomain>.workers.dev. Stated explicitly rather than
+# left to default, so a deploy never silently changes which URLs exist.
+workers_dev = true
+
+# Per-version preview URLs are off: this is a personal health log, and every
+# extra public endpoint is another surface to think about. The passcode guards
+# them equally, but there is no reason to have them. Set true if you ever want
+# to check a version before promoting it.
+preview_urls = false
+
 # Static assets (the phone UI) are served straight from the edge.
 [assets]
 directory = "./public"
 binding = "ASSETS"
 
-# Create the database first:
-#   npx wrangler d1 create fitness
-# then paste the database_id it prints in below.
+# `npm run setup` fills this in. The id identifies a database but grants no
+# access to it, so it lives in the repo — it is not a credential. Anyone
+# reaching this database still needs your Cloudflare account.
 [[d1_databases]]
 binding = "DB"
 database_name = "fitness"
-database_id = "PASTE_YOUR_DATABASE_ID_HERE"
+database_id = "16873de4-9b0a-4070-9443-9e7ae1ba55a2"
 
 # Secrets are NOT set here — they would end up in git. Set them with:
 #   npx wrangler secret put APP_PASSCODE       (required)

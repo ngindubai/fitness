@@ -43,18 +43,18 @@ export const MUSCLES_BY_ID = new Map(MUSCLES.map((m) => [m.id, m]))
  * a squat session.
  */
 const CARDIO_MUSCLES = {
-  rowing_machine: { lats: 0.6, mid_back: 0.5, quads: 0.6, hamstrings: 0.4, biceps: 0.3 },
-  assault_bike: { quads: 0.6, front_delts: 0.4, triceps: 0.3, hamstrings: 0.3 },
-  skierg: { lats: 0.7, triceps: 0.5, abs: 0.4 },
-  elliptical: { quads: 0.5, glutes: 0.4, hamstrings: 0.3 },
-  stairs: { quads: 0.7, glutes: 0.7, calves: 0.5 },
-  swim: { lats: 0.7, front_delts: 0.5, triceps: 0.4, mid_back: 0.3 },
-  cycle: { quads: 0.7, glutes: 0.4, hamstrings: 0.3, calves: 0.3 },
-  run: { quads: 0.5, hamstrings: 0.5, calves: 0.6, glutes: 0.4 },
-  walk: { quads: 0.3, glutes: 0.3, calves: 0.4, hamstrings: 0.2 },
+  rowing_machine: { lats: 0.5, mid_back: 0.5, quads: 0.5, hamstrings: 0.5, biceps: 0.25 },
+  assault_bike: { quads: 0.5, front_delts: 0.5, triceps: 0.25, hamstrings: 0.25 },
+  skierg: { lats: 0.5, triceps: 0.5, abs: 0.5 },
+  elliptical: { quads: 0.5, glutes: 0.5, hamstrings: 0.25 },
+  stairs: { quads: 0.5, glutes: 0.5, calves: 0.5 },
+  swim: { lats: 0.5, front_delts: 0.5, triceps: 0.5, mid_back: 0.25 },
+  cycle: { quads: 0.5, glutes: 0.5, hamstrings: 0.25, calves: 0.25 },
+  run: { quads: 0.5, hamstrings: 0.5, calves: 0.5, glutes: 0.5 },
+  walk: { quads: 0.25, glutes: 0.25, calves: 0.5, hamstrings: 0.25 },
 }
 
-function cardioMusclesFor(activityId) {
+export function cardioMusclesFor(activityId) {
   if (!activityId) return null
   if (CARDIO_MUSCLES[activityId]) return CARDIO_MUSCLES[activityId]
   for (const [prefix, muscles] of Object.entries(CARDIO_MUSCLES)) {
@@ -75,7 +75,7 @@ function strengthMusclesFor(item) {
   for (const { term, exercise } of EXERCISE_ALIAS_INDEX) {
     if (name.includes(term)) return exercise.muscles
   }
-  return { quads: 0.3, chest: 0.3, lats: 0.3 } // unknown lift: spread thin
+  return { quads: 0.25, chest: 0.25, lats: 0.25 } // unknown lift: spread thin
 }
 
 /**
@@ -104,7 +104,7 @@ export function itemMuscleEffort(item) {
   // An unstructured "45 min weights" session: real work with no exercise
   // list, so spread it thinly across the big movers.
   if (!muscles && tags.includes('strength')) {
-    muscles = { quads: 0.3, glutes: 0.3, chest: 0.3, lats: 0.3, front_delts: 0.2 }
+    muscles = { quads: 0.25, glutes: 0.25, chest: 0.25, lats: 0.25, front_delts: 0.25 }
   }
   if (muscles && item.minutes) {
     // One unit per 10 minutes, nudged by intensity (met vs a moderate 5).

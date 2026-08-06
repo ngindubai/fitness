@@ -6,15 +6,15 @@
  */
 
 import { parseMeal, parseWorkout, activityKcal, reweighFoodItem, suggestFoods, suggestWorkouts } from './parse.js'
-import { buildDay, buildWeek, summarisePeriod, targetsFor, climateAdjustedKcal, DEFAULT_PROFILE, BASELINE_LEVELS, GOALS, CLIMATES, EAT_BACK } from './engine.js'
+import { buildDay, buildWeek, summarisePeriod, targetsFor, climateAdjustedKcal, DEFAULT_PROFILE, BASELINE_LEVELS, GOALS, CLIMATES, EAT_BACK, bmiInfo, BMI_BANDS } from './engine.js'
 import { reviewDay, reviewWeek } from './coach.js'
 import { recommendMeals, suggestDay, buildTasteProfile } from './recommend.js'
 import { FOODS, FOODS_BY_ID } from './data/foods.js'
 import { ACTIVITIES } from './data/activities.js'
 import { issueToken, verifyToken, checkPasscode, extractToken, sessionCookie, clearedCookie, hashPasscode, verifyPasscodeHash } from './auth.js'
 import { planForDate, itemsForBlock, planOverview } from './plan.js'
-import { MUSCLES, muscleEffortFor, recoveringMuscles, RECOVERY_HOURS } from './muscles.js'
-import { EXERCISES } from './data/exercises.js'
+import { MUSCLES, muscleEffortFor, recoveringMuscles, cardioMusclesFor, RECOVERY_HOURS } from './muscles.js'
+import { EXERCISES, muscleTiers } from './data/exercises.js'
 import { PLANS, PLAN_LIST } from './data/plans.js'
 import { aiReview, aiMealIdeas, isAiConfigured } from './ai.js'
 
@@ -224,6 +224,8 @@ export async function handleApi(request, ctx) {
       return json({
         profile,
         targets: targetsFor(profile, 0),
+        bmi: bmiInfo(profile),
+        bmiBands: BMI_BANDS,
         options: { baselines: BASELINE_LEVELS, goals: GOALS, climates: CLIMATES, plans: PLAN_LIST, eatBack: EAT_BACK },
         today,
       })
@@ -232,7 +234,7 @@ export async function handleApi(request, ctx) {
       const body = await readJson(request)
       const next = sanitiseProfile({ ...profile, ...body })
       const saved = await store.setProfile(userId, next)
-      return json({ profile: saved, targets: targetsFor(saved, 0) })
+      return json({ profile: saved, targets: targetsFor(saved, 0), bmi: bmiInfo(saved) })
     }
   }
 
@@ -470,10 +472,13 @@ export async function handleApi(request, ctx) {
   // The exercise menu: every lift with its muscles, plus the cardio machines.
   if (path === '/exercises' && method === 'GET') {
     return json({
-      exercises: EXERCISES.map((e) => ({ id: e.id, name: e.name, group: e.group, muscles: e.muscles })),
+      exercises: EXERCISES.map((e) => ({ id: e.id, name: e.name, group: e.group, muscles: e.muscles, tiers: muscleTiers(e) })),
       cardio: ACTIVITIES
         .filter((a) => CARDIO_MACHINES.has(a.id))
-        .map((a) => ({ id: a.id, name: a.name, met: a.met })),
+        .map((a) => {
+          const muscles = cardioMusclesFor(a.id)
+          return { id: a.id, name: a.name, met: a.met, muscles, tiers: muscles ? muscleTiers({ muscles }) : null }
+        }),
     })
   }
 
@@ -774,5 +779,6 @@ function sanitiseProfile(input) {
     planId: input.planId && PLANS[input.planId] ? input.planId : null,
     planStart: isValidDate(input.planStart) ? input.planStart : null,
     eatBack: input.eatBack in EAT_BACK ? input.eatBack : DEFAULT_PROFILE.eatBack,
+    onboarded: input.onboarded === true,
   }
 }

@@ -28,7 +28,8 @@ test('the exercise menu is genuinely large and fully muscle-mapped', () => {
     assert.ok(muscles.length >= 1, `${exercise.id} maps no muscles`)
     for (const [muscle, share] of muscles) {
       assert.ok(valid.has(muscle), `${exercise.id} maps unknown muscle "${muscle}"`)
-      assert.ok(share > 0 && share <= 1, `${exercise.id} ${muscle} share ${share}`)
+      // Tiered weighting: primary 1, secondary 0.5, tertiary 0.25 — no other values.
+      assert.ok([1, 0.5, 0.25].includes(share), `${exercise.id} ${muscle} share ${share} is not a tier weight`)
     }
     assert.ok(muscles.some(([, share]) => share === 1), `${exercise.id} has no prime mover`)
   }
@@ -57,9 +58,9 @@ test('old aliases still resolve after the split-out', () => {
 test('a bench set loads chest most, triceps and front delts less', () => {
   const [item] = parseWorkout('bench 3x8 80kg')
   const effort = itemMuscleEffort(item)
-  assert.equal(effort.chest, 3)          // 3 sets × share 1
-  assert.equal(effort.triceps, 1.8)      // 3 × 0.6
-  assert.equal(effort.front_delts, 1.5)  // 3 × 0.5
+  assert.equal(effort.chest, 3)          // 3 sets × primary (1)
+  assert.equal(effort.triceps, 1.5)      // 3 × secondary (0.5)
+  assert.equal(effort.front_delts, 1.5)  // 3 × secondary (0.5)
   assert.ok(!effort.quads)
 })
 

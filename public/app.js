@@ -150,6 +150,7 @@ $('login-form').addEventListener('submit', async (event) => {
       }),
     })
     state.token = token
+    state.justSignedUp = signupMode // fresh accounts get blank onboarding fields
     localStorage.setItem('ff_token', token)
     $('passcode').value = ''
     $('signup-name').value = ''
@@ -168,6 +169,7 @@ function signOut() {
   localStorage.removeItem('ff_token')
   setSignupMode(false)
   $('app').classList.add('hidden')
+  $('onboard').classList.add('hidden')
   $('login').classList.remove('hidden')
 }
 
@@ -196,6 +198,7 @@ function showView(view) {
   if (view === 'body') loadBody()
   if (view === 'meals') loadRecommendations()
   if (view === 'pantry') { loadPantry(); loadIngredients() }
+  if (view === 'you') renderBmi()
 }
 
 // ------------------------------------------------------------ date + strips
@@ -1521,6 +1524,15 @@ function pickExercise(row) {
   $('exercise-list').classList.add('hidden')
   $('exercise-config').classList.remove('hidden')
   $('picked-name').textContent = row.name
+  const tiers = row.tiers
+  $('picked-muscles').innerHTML = tiers
+    ? [['Primary', tiers.primary], ['Secondary', tiers.secondary], ['Also works', tiers.tertiary]]
+        .filter(([, list]) => list && list.length)
+        .map(([label, list]) =>
+          `<div class="tier-row"><span class="tier-label">${label}</span>` +
+          `${list.map((m) => `<span class="tier-muscle">${escapeHtml(m.replace(/_/g, ' '))}</span>`).join('')}</div>`)
+        .join('')
+    : ''
   $('picked-strength').classList.toggle('hidden', row.kind === 'cardio')
   $('picked-cardio').classList.toggle('hidden', row.kind !== 'cardio')
 }
@@ -1833,8 +1845,11 @@ async function logSuggestedMeal(meals, id) {
 // ----------------------------------------------------------------- profile
 
 async function loadProfile() {
-  const { profile, options, targets, today } = await api('/profile')
+  const { profile, options, targets, today, bmi, bmiBands } = await api('/profile')
   state.profile = profile
+  state.options = options
+  state.bmi = bmi
+  state.bmiBands = bmiBands
   state.today = today
   if (!state.date) { state.date = today; state.statsDate = today }
 
@@ -1872,7 +1887,7 @@ function renderTargetSummary(targets) {
 $('profile-form').addEventListener('submit', async (event) => {
   event.preventDefault()
   try {
-    const { profile, targets } = await api('/profile', {
+    const { profile, targets, bmi } = await api('/profile', {
       method: 'PUT',
       body: JSON.stringify({
         name: $('p-name').value,
@@ -1891,11 +1906,172 @@ $('profile-form').addEventListener('submit', async (event) => {
       }),
     })
     state.profile = profile
+    state.bmi = bmi
     renderTargetSummary(targets)
+    renderBmi()
     toast('Saved.')
     await loadDay()
   } catch (error) { toast(error.message, true) }
 })
+
+// -------------------------------------------------------------- onboarding
+
+/*
+ * First-login gate. Daily calories come from Mifflin-St Jeor, which needs
+ * sex, age, height and weight — so nobody reaches the app until those are
+ * entered. Existing accounts pass through once with their saved numbers
+ * prefilled; brand-new accounts start blank so the numbers are really theirs.
+ */
+function showOnboarding() {
+  const profile = state.profile
+  const options = state.options || {}
+  $('ob-baseline').innerHTML = Object.entries(options.baselines || {})
+    .map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')
+  $('ob-goal').innerHTML = Object.entries(options.goals || {})
+    .map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')
+  if (state.justSignedUp) {
+    $('ob-sex').value = ''
+    $('ob-age').value = ''
+    $('ob-height').value = ''
+    $('ob-weight').value = ''
+    $('ob-baseline').value = 'light'
+    $('ob-goal').value = 'maintain'
+  } else {
+    $('ob-sex').value = profile.sex || ''
+    $('ob-age').value = profile.age || ''
+    $('ob-height').value = profile.heightCm || ''
+    $('ob-weight').value = profile.weightKg || ''
+    $('ob-baseline').value = profile.baseline
+    $('ob-goal').value = profile.goal
+  }
+  onboardPreview()
+  $('login').classList.add('hidden')
+  $('app').classList.add('hidden')
+  $('onboard').classList.remove('hidden')
+}
+
+// Live preview of what the numbers mean, using the same Mifflin-St Jeor
+// constants as the engine (10W + 6.25H − 5A, +5 men / −161 women).
+function onboardPreview() {
+  const sex = $('ob-sex').value
+  const age = Number($('ob-age').value)
+  const height = Number($('ob-height').value)
+  const weight = Number($('ob-weight').value)
+  if (!sex || !age || !height || !weight) { $('ob-preview').textContent = ''; return }
+  const offset = sex === 'male' ? 5 : sex === 'female' ? -161 : -78
+  const bmr = Math.round(10 * weight + 6.25 * height - 5 * age + offset)
+  const bmi = (weight / ((height / 100) ** 2)).toFixed(1)
+  $('ob-preview').textContent =
+    `Resting metabolic rate about ${bmr.toLocaleString()} kcal/day (Mifflin-St Jeor). BMI ${bmi}.`
+}
+
+;['ob-sex', 'ob-age', 'ob-height', 'ob-weight'].forEach((id) => {
+  $(id).addEventListener('input', onboardPreview)
+  $(id).addEventListener('change', onboardPreview)
+})
+
+$('onboard-form').addEventListener('submit', async (event) => {
+  event.preventDefault()
+  $('onboard-error').textContent = ''
+  try {
+    await api('/profile', {
+      method: 'PUT',
+      body: JSON.stringify({
+        sex: $('ob-sex').value,
+        age: Number($('ob-age').value),
+        heightCm: Number($('ob-height').value),
+        weightKg: Number($('ob-weight').value),
+        baseline: $('ob-baseline').value,
+        goal: $('ob-goal').value,
+        onboarded: true,
+      }),
+    })
+    state.justSignedUp = false
+    $('onboard').classList.add('hidden')
+    await boot()
+  } catch (error) {
+    $('onboard-error').textContent = error.message
+  }
+})
+
+// --------------------------------------------------------------------- BMI
+
+const BMI_COLOURS = {
+  underweight: '#38bdf8', healthy: 'var(--good)', overweight: '#f0b429',
+  obese1: '#f97316', obese2: '#ef4444', obese3: '#b91c1c',
+}
+const BMI_LO = 14, BMI_HI = 44 // display window for the gauge
+
+function renderBmi() {
+  const el = $('bmi-card')
+  const info = state.bmi
+  if (!el || !info) return
+  const bandColour = BMI_COLOURS[info.band] || 'var(--accent)'
+  el.innerHTML = `
+    <div class="bmi-figure">${info.bmi}<small style="color:${bandColour}">${info.label}</small></div>
+    ${bmiGauge(info)}
+    <p class="bmi-note">Healthy range for your height (BMI 18.5–25):
+      <strong>${info.healthyKgMin}–${info.healthyKgMax} kg</strong>.</p>
+    <div id="bmi-trend"></div>
+    <p class="bmi-note faint">WHO adult classification. BMI is weight-for-height only —
+      it cannot tell muscle from fat, so read it as a trend, not a verdict.</p>`
+  loadBmiTrend()
+}
+
+function bmiGauge(info) {
+  const x = (bmi) => ((Math.min(BMI_HI, Math.max(BMI_LO, bmi)) - BMI_LO) / (BMI_HI - BMI_LO)) * 292 + 4
+  const bands = (state.bmiBands || []).map((band) => {
+    const left = x(Math.max(band.min, BMI_LO))
+    const width = Math.max(0, x(Math.min(band.max, BMI_HI)) - left)
+    return `<rect x="${left.toFixed(1)}" y="26" width="${width.toFixed(1)}" height="12" rx="2"
+      fill="${BMI_COLOURS[band.id] || 'var(--surface-3)'}" opacity="${band.id === state.bmi.band ? 1 : 0.35}">
+      <title>${band.label}: ${band.min}–${band.max === 60 ? '+' : band.max}</title></rect>`
+  }).join('')
+  const ticks = [18.5, 25, 30, 35, 40].map((t) =>
+    `<line x1="${x(t).toFixed(1)}" y1="24" x2="${x(t).toFixed(1)}" y2="40" stroke="var(--bg)" stroke-width="1"/>
+     <text x="${x(t).toFixed(1)}" y="52" font-size="8" fill="var(--faint)" text-anchor="middle">${t}</text>`).join('')
+  const mx = x(info.bmi)
+  return `<svg class="bmi-scale" viewBox="0 0 300 56" role="img" aria-label="BMI ${info.bmi}, ${info.label}">
+    ${bands}${ticks}
+    <path d="M${(mx - 5).toFixed(1)} 12 h10 l-5 9 z" fill="var(--text)"/>
+    <text x="${mx.toFixed(1)}" y="9" font-size="9.5" font-weight="700" fill="var(--text)"
+      text-anchor="middle">${info.bmi}</text>
+  </svg>`
+}
+
+// BMI over time, derived from weigh-ins at the current height.
+async function loadBmiTrend() {
+  const box = $('bmi-trend')
+  if (!box || !state.profile) return
+  try {
+    const { weights } = await api('/history?days=180')
+    if (!weights || weights.length < 2) {
+      box.innerHTML = '<p class="bmi-note">Log weigh-ins to see your BMI trend here.</p>'
+      return
+    }
+    const heightM = state.profile.heightCm / 100
+    const points = weights.map((w) => ({ date: w.date, bmi: w.value / (heightM * heightM) }))
+    const values = points.map((p) => p.bmi)
+    const min = Math.min(...values) - 0.6
+    const max = Math.max(...values) + 0.6
+    const span = Math.max(1, max - min)
+    const px = (i) => (points.length === 1 ? 150 : (i / (points.length - 1)) * 292 + 4)
+    const py = (v) => 96 - ((v - min) / span) * 82
+    const line = points.map((p, i) => `${px(i).toFixed(1)},${py(p.bmi).toFixed(1)}`).join(' ')
+    const guides = [18.5, 25, 30, 35, 40].filter((g) => g > min - 0.5 && g < max + 0.5).map((g) =>
+      `<line x1="4" y1="${py(g).toFixed(1)}" x2="296" y2="${py(g).toFixed(1)}"
+         stroke="var(--border)" stroke-dasharray="3 4" stroke-width="1"/>
+       <text x="296" y="${(py(g) - 3).toFixed(1)}" font-size="8" fill="var(--faint)" text-anchor="end">${g}</text>`).join('')
+    const last = points[points.length - 1]
+    box.innerHTML = `<h2 style="margin-top:14px">BMI over time</h2>
+      <svg class="chart" viewBox="0 0 300 110" preserveAspectRatio="none" role="img" aria-label="BMI trend">
+        ${guides}
+        <polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="2"
+          stroke-linejoin="round" stroke-linecap="round"/>
+        <text x="296" y="106" font-size="9" fill="var(--muted)" text-anchor="end">${last.bmi.toFixed(1)} now</text>
+      </svg>`
+  } catch { box.innerHTML = '' }
+}
 
 // -------------------------------------------------------------------- boot
 
@@ -1903,10 +2079,18 @@ async function boot() {
   if (!state.token) {
     $('login').classList.remove('hidden')
     $('app').classList.add('hidden')
+    $('onboard').classList.add('hidden')
     return
   }
   try {
     await loadProfile()
+
+    // Nobody uses the app before telling it who they are: the calorie maths
+    // is personal or it is fiction.
+    if (!state.profile.onboarded) {
+      showOnboarding()
+      return
+    }
 
     const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone
     if (browserZone && state.profile.timezone !== browserZone && !localStorage.getItem('ff_tz_set')) {
@@ -1922,6 +2106,7 @@ async function boot() {
     syncCalendars()
 
     $('login').classList.add('hidden')
+    $('onboard').classList.add('hidden')
     $('app').classList.remove('hidden')
     showView('today')
   } catch (error) {

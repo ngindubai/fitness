@@ -66,6 +66,36 @@ export const DEFAULT_PROFILE = {
   planId: null,       // structured six-month plan, if following one
   planStart: null,    // ISO date the plan began (ideally a Monday)
   eatBack: 'all',     // how training burn extends the day's calorie budget
+  onboarded: false,   // true once sex/age/height/weight were entered by hand
+}
+
+/**
+ * WHO adult BMI classification (also used by the CDC). BMI has a real and
+ * well-known blind spot — it cannot tell muscle from fat — so everywhere it
+ * is shown, it is shown as context, never as a verdict.
+ */
+export const BMI_BANDS = [
+  { id: 'underweight', label: 'Underweight', min: 0, max: 18.5 },
+  { id: 'healthy', label: 'Healthy', min: 18.5, max: 25 },
+  { id: 'overweight', label: 'Overweight', min: 25, max: 30 },
+  { id: 'obese1', label: 'Obese I', min: 30, max: 35 },
+  { id: 'obese2', label: 'Obese II', min: 35, max: 40 },
+  { id: 'obese3', label: 'Obese III', min: 40, max: 60 },
+]
+
+/** @returns {{bmi:number, band:string, label:string, healthyKgMin:number, healthyKgMax:number}} */
+export function bmiInfo(profile) {
+  const heightM = profile.heightCm / 100
+  const bmi = Math.round((profile.weightKg / (heightM * heightM)) * 10) / 10
+  const band = BMI_BANDS.find((b) => bmi >= b.min && bmi < b.max) || BMI_BANDS[BMI_BANDS.length - 1]
+  return {
+    bmi,
+    band: band.id,
+    label: band.label,
+    // The weight range that would land this height in the healthy band.
+    healthyKgMin: Math.round(18.5 * heightM * heightM),
+    healthyKgMax: Math.round(24.9 * heightM * heightM),
+  }
 }
 
 /**

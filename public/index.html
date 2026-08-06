@@ -54,7 +54,9 @@
     if (shown) return
     var app = document.getElementById('app')
     var login = document.getElementById('login')
+    var onboard = document.getElementById('onboard')
     if (app && !app.classList.contains('hidden')) return // app is up; all fine
+    if (onboard && !onboard.classList.contains('hidden')) return // onboarding is a healthy boot too
     if (selfRepair()) return // first failure this session: repair and reload
     shown = true
     if (login) login.classList.remove('hidden')
@@ -120,6 +122,38 @@
     </form>
     <p id="login-error" class="login-err"></p>
     <button class="login-switch" id="login-switch" type="button">New here? Create your passcode</button>
+  </div>
+</section>
+
+<!-- -------------------------------------------------------- onboarding -->
+<section id="onboard" class="login hidden">
+  <div class="login-inner onboard-inner">
+    <div class="brand-mark" aria-hidden="true"></div>
+    <h1>About you</h1>
+    <p class="serif-sub">Your daily calorie target is calculated from your sex, age, height and weight. Fill these in to start.</p>
+    <form id="onboard-form">
+      <div class="field"><label for="ob-sex">Sex</label>
+        <select id="ob-sex" required>
+          <option value="" disabled selected>Choose…</option>
+          <option value="male">Male</option>
+          <option value="female">Female</option>
+          <option value="other">Prefer not to say</option>
+        </select>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label for="ob-age">Age</label>
+          <input id="ob-age" type="number" min="13" max="100" required inputmode="numeric" placeholder="years"></div>
+        <div class="field"><label for="ob-height">Height</label>
+          <input id="ob-height" type="number" min="120" max="230" required inputmode="numeric" placeholder="cm"></div>
+      </div>
+      <div class="field"><label for="ob-weight">Weight</label>
+        <input id="ob-weight" type="number" min="30" max="400" step="0.1" required inputmode="decimal" placeholder="kg"></div>
+      <div class="field"><label for="ob-baseline">Daily life, outside training</label><select id="ob-baseline"></select></div>
+      <div class="field"><label for="ob-goal">Goal</label><select id="ob-goal"></select></div>
+      <p class="hint" id="ob-preview"></p>
+      <button class="btn primary" style="width:100%" type="submit">Start tracking</button>
+    </form>
+    <p id="onboard-error" class="login-err"></p>
   </div>
 </section>
 
@@ -431,6 +465,10 @@
         <p class="hint" id="targets-summary"></p>
       </div>
       <div class="card">
+        <h2>BMI</h2>
+        <div id="bmi-card"><p class="spinner">Loading…</p></div>
+      </div>
+      <div class="card">
         <h2>Session</h2>
         <button class="btn ghost" id="logout">Sign out</button>
       </div>
@@ -462,6 +500,7 @@
     <div id="exercise-list"></div>
     <div id="exercise-config" class="hidden">
       <div class="picked-name" id="picked-name"></div>
+      <div class="picked-muscles" id="picked-muscles"></div>
       <div class="grid-3" id="picked-strength">
         <div class="field"><label for="pk-sets">Sets</label><input id="pk-sets" type="number" min="1" max="10" value="3" inputmode="numeric"></div>
         <div class="field"><label for="pk-reps">Reps</label><input id="pk-reps" type="number" min="1" max="100" value="10" inputmode="numeric"></div>

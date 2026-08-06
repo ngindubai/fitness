@@ -624,6 +624,39 @@ nav.tabs button[aria-current='true'] { color: var(--accent); font-weight: 600; }
 .login-switch { color: var(--muted); font-size: 0.84rem; margin-top: 18px; text-decoration: underline; text-underline-offset: 3px; }
 .login-switch:hover { color: var(--accent); }
 
+/* Onboarding reuses the login backdrop but with a proper labelled form. */
+.onboard-inner { width: min(400px, 100%); text-align: left; }
+.onboard-inner h1, .onboard-inner .serif-sub { text-align: center; }
+.onboard-inner .brand-mark { margin-left: auto; margin-right: auto; }
+.onboard-inner .field input, .onboard-inner .field select {
+  text-align: left;
+  font-size: 0.95rem;
+  letter-spacing: normal;
+  padding: 11px 12px;
+  margin-bottom: 0;
+}
+.onboard-inner .login-err { text-align: center; }
+
+/* Muscle tiers in the exercise picker */
+.picked-muscles { margin: -4px 0 12px; }
+.tier-row { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-bottom: 5px; }
+.tier-label { color: var(--faint); font-size: 0.7rem; min-width: 74px; letter-spacing: 0.03em; }
+.tier-muscle {
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 2px 9px;
+  font-size: 0.72rem;
+  color: var(--text);
+}
+
+/* BMI gauge + trend */
+.bmi-figure { font-size: 1.6rem; font-weight: 650; margin-bottom: 2px; }
+.bmi-figure small { font-size: 0.8rem; color: var(--muted); font-weight: 500; margin-left: 6px; }
+.bmi-scale { width: 100%; height: auto; display: block; margin: 10px 0 4px; }
+.bmi-note { color: var(--muted); font-size: 0.8rem; margin: 8px 0 0; }
+.bmi-note.faint { color: var(--faint); font-size: 0.74rem; }
+
 .didyoumean { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; grid-column: 1 / -1; }
 .didyoumean .lead { color: var(--faint); font-size: 0.74rem; align-self: center; }
 .didyoumean button {

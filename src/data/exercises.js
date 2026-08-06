@@ -10,42 +10,49 @@
  *
  * Row format: [id, name, aliases, group, muscles]
  *   group:   legs | push | pull | core | full
- *   muscles: 'muscle:share ...' — share 1 for prime movers, 0.3–0.7 for
- *            assisting muscles. Shares are standard anatomy, not lab data;
- *            they are for comparing weeks, not for surgery.
+ *   muscles: 'muscle:tier ...' where the tier weights follow the standard
+ *            practitioner convention for counting training volume:
+ *              1    — primary mover (a set counts fully for this muscle)
+ *              0.5  — secondary / synergist (counts half)
+ *              0.25 — tertiary / stabiliser (counts a quarter)
+ *            EMG research supports counting synergist work fractionally,
+ *            but exact ratios are not settled science (Baz-Valle 2019,
+ *            PMC6681288 recommends practitioner judgement) — so these are
+ *            the accepted halving convention, applied consistently, and
+ *            they exist to compare weeks, not to measure physiology.
  */
 
 // prettier-ignore
 const ROWS = [
   // ------------------------------------------------------------ legs: squat
-  ['squat', 'Back squat', 'squat|squats|back squat|barbell squat|smith squat|pause squat|high bar squat|low bar squat', 'legs', 'quads:1 glutes:0.8 hamstrings:0.4 lower_back:0.4 abs:0.3'],
-  ['front_squat', 'Front squat', 'front squat|front squats|zercher squat', 'legs', 'quads:1 glutes:0.6 abs:0.5 lower_back:0.3'],
-  ['goblet_squat', 'Goblet squat', 'goblet squat|goblet squats', 'legs', 'quads:1 glutes:0.7 abs:0.4 forearms:0.2'],
+  ['squat', 'Back squat', 'squat|squats|back squat|barbell squat|smith squat|pause squat|high bar squat|low bar squat', 'legs', 'quads:1 glutes:1 hamstrings:0.5 lower_back:0.5 abs:0.25'],
+  ['front_squat', 'Front squat', 'front squat|front squats|zercher squat', 'legs', 'quads:1 glutes:0.5 abs:0.5 lower_back:0.25'],
+  ['goblet_squat', 'Goblet squat', 'goblet squat|goblet squats', 'legs', 'quads:1 glutes:0.5 abs:0.5 forearms:0.25'],
   ['hack_squat', 'Hack squat', 'hack squat|hack squats', 'legs', 'quads:1 glutes:0.5'],
-  ['leg_press', 'Leg press', 'leg press|leg press machine|single leg press', 'legs', 'quads:1 glutes:0.6 hamstrings:0.3'],
-  ['pistol_squat', 'Pistol squat', 'pistol squat|pistol squats|single leg squat', 'legs', 'quads:1 glutes:0.8 abs:0.4'],
-  ['sumo_squat', 'Sumo squat', 'sumo squat|sumo squats|plie squat', 'legs', 'adductors:0.7 glutes:1 quads:0.7'],
+  ['leg_press', 'Leg press', 'leg press|leg press machine|single leg press', 'legs', 'quads:1 glutes:0.5 hamstrings:0.25'],
+  ['pistol_squat', 'Pistol squat', 'pistol squat|pistol squats|single leg squat', 'legs', 'quads:1 glutes:1 abs:0.5'],
+  ['sumo_squat', 'Sumo squat', 'sumo squat|sumo squats|plie squat', 'legs', 'adductors:0.5 glutes:1 quads:0.5'],
   ['sissy_squat', 'Sissy squat', 'sissy squat|sissy squats', 'legs', 'quads:1'],
-  ['wall_sit', 'Wall sit', 'wall sit|wall sits', 'legs', 'quads:1 glutes:0.3'],
+  ['wall_sit', 'Wall sit', 'wall sit|wall sits', 'legs', 'quads:1 glutes:0.25'],
 
   // ------------------------------------------------------------ legs: hinge
-  ['deadlift', 'Deadlift', 'deadlift|deadlifts|conventional deadlift|sumo deadlift|trap bar deadlift|rack pull', 'full', 'glutes:1 hamstrings:0.9 lower_back:0.8 quads:0.5 traps:0.5 forearms:0.5 lats:0.4'],
-  ['rdl', 'Romanian deadlift', 'rdl|romanian deadlift|romanian deadlifts|stiff leg deadlift|dumbbell romanian deadlift', 'legs', 'hamstrings:1 glutes:0.9 lower_back:0.5 forearms:0.3'],
-  ['single_leg_rdl', 'Single-leg RDL', 'single leg rdl|single leg romanian deadlift|one leg rdl', 'legs', 'hamstrings:1 glutes:1 lower_back:0.3 abs:0.3'],
-  ['good_morning', 'Good mornings', 'good morning|good mornings', 'legs', 'hamstrings:1 glutes:0.7 lower_back:0.7'],
-  ['hip_thrust', 'Hip thrust', 'hip thrust|hip thrusts|barbell hip thrust', 'legs', 'glutes:1 hamstrings:0.4'],
-  ['glute_bridge', 'Glute bridge', 'glute bridge|glute bridges', 'legs', 'glutes:1 hamstrings:0.3'],
-  ['back_extension', 'Back extension', 'back extension|back extensions|hyperextension|hyperextensions|45 degree back extension', 'pull', 'lower_back:1 glutes:0.7 hamstrings:0.6'],
-  ['kettlebell_swing', 'Kettlebell swing', 'kettlebell swing|kettlebell swings|kb swing|kb swings', 'full', 'glutes:1 hamstrings:0.8 lower_back:0.5 abs:0.3 forearms:0.3'],
+  ['deadlift', 'Deadlift', 'deadlift|deadlifts|conventional deadlift|sumo deadlift|trap bar deadlift|rack pull', 'full', 'glutes:1 hamstrings:1 lower_back:1 quads:0.5 traps:0.5 forearms:0.5 lats:0.5'],
+  ['rdl', 'Romanian deadlift', 'rdl|romanian deadlift|romanian deadlifts|stiff leg deadlift|dumbbell romanian deadlift', 'legs', 'hamstrings:1 glutes:1 lower_back:0.5 forearms:0.25'],
+  ['single_leg_rdl', 'Single-leg RDL', 'single leg rdl|single leg romanian deadlift|one leg rdl', 'legs', 'hamstrings:1 glutes:1 lower_back:0.25 abs:0.25'],
+  ['good_morning', 'Good mornings', 'good morning|good mornings', 'legs', 'hamstrings:1 glutes:0.5 lower_back:0.5'],
+  ['hip_thrust', 'Hip thrust', 'hip thrust|hip thrusts|barbell hip thrust', 'legs', 'glutes:1 hamstrings:0.5'],
+  ['glute_bridge', 'Glute bridge', 'glute bridge|glute bridges', 'legs', 'glutes:1 hamstrings:0.25'],
+  ['back_extension', 'Back extension', 'back extension|back extensions|hyperextension|hyperextensions|45 degree back extension', 'pull', 'lower_back:1 glutes:0.5 hamstrings:0.5'],
+  ['kettlebell_swing', 'Kettlebell swing', 'kettlebell swing|kettlebell swings|kb swing|kb swings', 'full', 'glutes:1 hamstrings:1 lower_back:0.5 abs:0.25 forearms:0.25'],
 
   // ----------------------------------------------------------- legs: single
-  ['lunge', 'Lunges', 'lunge|lunges|walking lunges|forward lunge', 'legs', 'quads:1 glutes:0.8 hamstrings:0.3'],
-  ['reverse_lunge', 'Reverse lunge', 'reverse lunge|reverse lunges', 'legs', 'glutes:1 quads:0.8 hamstrings:0.3'],
-  ['split_squat', 'Split squat', 'split squat|split squats', 'legs', 'quads:1 glutes:0.8'],
-  ['bulgarian_split_squat', 'Bulgarian split squat', 'bulgarian split squat|bulgarian split squats|bulgarians|rear foot elevated split squat', 'legs', 'glutes:1 quads:0.9 hamstrings:0.3'],
-  ['step_up', 'Step-ups', 'step ups|step up|weighted step ups', 'legs', 'glutes:1 quads:0.8'],
-  ['lateral_lunge', 'Lateral lunge', 'lateral lunge|side lunge|lateral lunges|cossack squat', 'legs', 'glutes:1 quads:0.8 adductors:0.6'],
-  ['curtsy_lunge', 'Curtsy lunge', 'curtsy lunge|curtsy lunges', 'legs', 'glutes:1 quads:0.6'],
+  ['lunge', 'Lunges', 'lunge|lunges|walking lunges|forward lunge', 'legs', 'quads:1 glutes:1 hamstrings:0.25'],
+  ['reverse_lunge', 'Reverse lunge', 'reverse lunge|reverse lunges', 'legs', 'glutes:1 quads:1 hamstrings:0.25'],
+  ['split_squat', 'Split squat', 'split squat|split squats', 'legs', 'quads:1 glutes:1'],
+  ['bulgarian_split_squat', 'Bulgarian split squat', 'bulgarian split squat|bulgarian split squats|bulgarians|rear foot elevated split squat', 'legs', 'glutes:1 quads:1 hamstrings:0.25'],
+  ['step_up', 'Step-ups', 'step ups|step up|weighted step ups', 'legs', 'glutes:1 quads:1'],
+  ['lateral_lunge', 'Lateral lunge', 'lateral lunge|side lunge|lateral lunges|cossack squat', 'legs', 'glutes:1 quads:1 adductors:0.5'],
+  ['curtsy_lunge', 'Curtsy lunge', 'curtsy lunge|curtsy lunges', 'legs', 'glutes:1 quads:0.5'],
 
   // --------------------------------------------------------- legs: machines
   ['leg_extension', 'Leg extension', 'leg extension|leg extensions|quad extension', 'legs', 'quads:1'],
@@ -56,30 +63,30 @@ const ROWS = [
   ['glute_kickback', 'Glute kickback', 'glute kickback|glute kickbacks|cable kickback|donkey kicks', 'legs', 'glutes:1'],
 
   // ------------------------------------------------------- push: horizontal
-  ['bench', 'Bench press', 'bench|bench press|flat bench|barbell bench|paused bench', 'push', 'chest:1 triceps:0.6 front_delts:0.5'],
-  ['close_grip_bench', 'Close-grip bench', 'close grip bench|close grip bench press|cgbp', 'push', 'triceps:1 chest:0.6 front_delts:0.4'],
-  ['incline_bench', 'Incline bench press', 'incline bench|incline press|incline bench press|incline barbell', 'push', 'chest:1 front_delts:0.7 triceps:0.5'],
+  ['bench', 'Bench press', 'bench|bench press|flat bench|barbell bench|paused bench', 'push', 'chest:1 triceps:0.5 front_delts:0.5'],
+  ['close_grip_bench', 'Close-grip bench', 'close grip bench|close grip bench press|cgbp', 'push', 'triceps:1 chest:0.5 front_delts:0.5'],
+  ['incline_bench', 'Incline bench press', 'incline bench|incline press|incline bench press|incline barbell', 'push', 'chest:1 front_delts:0.5 triceps:0.5'],
   ['decline_bench', 'Decline bench press', 'decline bench|decline press', 'push', 'chest:1 triceps:0.5'],
-  ['db_press', 'Dumbbell bench press', 'dumbbell press|db press|dumbbell bench|db bench|dumbbell bench press', 'push', 'chest:1 triceps:0.6 front_delts:0.5'],
-  ['incline_db_press', 'Incline dumbbell press', 'incline dumbbell press|incline db press|incline dumbbell bench', 'push', 'chest:1 front_delts:0.7 triceps:0.5'],
-  ['chest_press_machine', 'Chest press (machine)', 'chest press|chest press machine|machine press|seated chest press', 'push', 'chest:1 triceps:0.5 front_delts:0.4'],
-  ['press_up', 'Press-ups', 'press ups|press up|push ups|push up|pushups|pushup|diamond push ups|incline push ups|decline push ups', 'push', 'chest:1 triceps:0.6 front_delts:0.5 abs:0.3'],
-  ['chest_fly', 'Chest fly', 'chest fly|chest flys|chest flyes|pec deck|cable crossover|cable fly|dumbbell fly|db fly', 'push', 'chest:1 front_delts:0.3'],
-  ['dip', 'Dips', 'dip|dips|weighted dips|chest dips|bench dips', 'push', 'chest:0.8 triceps:1 front_delts:0.4'],
-  ['svend_press', 'Svend press', 'svend press|plate press|plate squeeze press', 'push', 'chest:1 triceps:0.3'],
+  ['db_press', 'Dumbbell bench press', 'dumbbell press|db press|dumbbell bench|db bench|dumbbell bench press', 'push', 'chest:1 triceps:0.5 front_delts:0.5'],
+  ['incline_db_press', 'Incline dumbbell press', 'incline dumbbell press|incline db press|incline dumbbell bench', 'push', 'chest:1 front_delts:0.5 triceps:0.5'],
+  ['chest_press_machine', 'Chest press (machine)', 'chest press|chest press machine|machine press|seated chest press', 'push', 'chest:1 triceps:0.5 front_delts:0.5'],
+  ['press_up', 'Press-ups', 'press ups|press up|push ups|push up|pushups|pushup|diamond push ups|incline push ups|decline push ups', 'push', 'chest:1 triceps:0.5 front_delts:0.5 abs:0.25'],
+  ['chest_fly', 'Chest fly', 'chest fly|chest flys|chest flyes|pec deck|cable crossover|cable fly|dumbbell fly|db fly', 'push', 'chest:1 front_delts:0.25'],
+  ['dip', 'Dips', 'dip|dips|weighted dips|chest dips|bench dips', 'push', 'chest:1 triceps:1 front_delts:0.5'],
+  ['svend_press', 'Svend press', 'svend press|plate press|plate squeeze press', 'push', 'chest:1 triceps:0.25'],
 
   // --------------------------------------------------------- push: vertical
-  ['ohp', 'Overhead press', 'ohp|overhead press|shoulder press|military press|strict press|barbell shoulder press', 'push', 'front_delts:1 side_delts:0.6 triceps:0.6 traps:0.3 abs:0.3'],
-  ['db_shoulder_press', 'Dumbbell shoulder press', 'dumbbell shoulder press|db shoulder press|seated dumbbell shoulder press|seated shoulder press|shoulder press machine', 'push', 'front_delts:1 side_delts:0.6 triceps:0.5'],
-  ['arnold_press', 'Arnold press', 'arnold press|arnold presses', 'push', 'front_delts:1 side_delts:0.7 triceps:0.4'],
-  ['push_press', 'Push press', 'push press|push presses', 'full', 'front_delts:1 triceps:0.6 quads:0.4 glutes:0.3'],
-  ['landmine_press', 'Landmine press', 'landmine press|landmine', 'push', 'front_delts:1 chest:0.5 triceps:0.5 abs:0.3'],
-  ['pike_pushup', 'Pike push-ups', 'pike push ups|pike push up|pike pushups|handstand push ups', 'push', 'front_delts:1 side_delts:0.5 triceps:0.7'],
+  ['ohp', 'Overhead press', 'ohp|overhead press|shoulder press|military press|strict press|barbell shoulder press', 'push', 'front_delts:1 side_delts:0.5 triceps:0.5 traps:0.25 abs:0.25'],
+  ['db_shoulder_press', 'Dumbbell shoulder press', 'dumbbell shoulder press|db shoulder press|seated dumbbell shoulder press|seated shoulder press|shoulder press machine', 'push', 'front_delts:1 side_delts:0.5 triceps:0.5'],
+  ['arnold_press', 'Arnold press', 'arnold press|arnold presses', 'push', 'front_delts:1 side_delts:0.5 triceps:0.5'],
+  ['push_press', 'Push press', 'push press|push presses', 'full', 'front_delts:1 triceps:0.5 quads:0.5 glutes:0.25'],
+  ['landmine_press', 'Landmine press', 'landmine press|landmine', 'push', 'front_delts:1 chest:0.5 triceps:0.5 abs:0.25'],
+  ['pike_pushup', 'Pike push-ups', 'pike push ups|pike push up|pike pushups|handstand push ups', 'push', 'front_delts:1 side_delts:0.5 triceps:0.5'],
 
   // -------------------------------------------------------- push: shoulders
-  ['lateral_raise', 'Lateral raises', 'lateral raise|lateral raises|side raises|lat raises|cable lateral raise', 'push', 'side_delts:1 traps:0.2'],
+  ['lateral_raise', 'Lateral raises', 'lateral raise|lateral raises|side raises|lat raises|cable lateral raise', 'push', 'side_delts:1 traps:0.25'],
   ['front_raise', 'Front raises', 'front raise|front raises|plate raise', 'push', 'front_delts:1'],
-  ['upright_row', 'Upright row', 'upright row|upright rows', 'pull', 'side_delts:1 traps:0.7 biceps:0.3'],
+  ['upright_row', 'Upright row', 'upright row|upright rows', 'pull', 'side_delts:1 traps:0.5 biceps:0.25'],
 
   // ---------------------------------------------------------- push: triceps
   ['tricep_pushdown', 'Tricep pushdown', 'tricep pushdown|tricep pushdowns|pushdowns|rope pushdown|cable pushdown', 'push', 'triceps:1'],
@@ -88,64 +95,64 @@ const ROWS = [
   ['tricep_kickback', 'Tricep kickback', 'tricep kickback|tricep kickbacks|kickbacks', 'push', 'triceps:1'],
 
   // ------------------------------------------------------- pull: horizontal
-  ['row', 'Barbell row', 'row|rows|barbell row|barbell rows|bent over row|bent over rows|pendlay row|yates row', 'pull', 'lats:1 mid_back:0.9 rear_delts:0.5 biceps:0.5 lower_back:0.4 forearms:0.3'],
-  ['db_row', 'Dumbbell row', 'dumbbell row|dumbbell rows|db row|db rows|single arm row|one arm row|one arm dumbbell row|kroc row', 'pull', 'lats:1 mid_back:0.8 rear_delts:0.4 biceps:0.5 forearms:0.3'],
-  ['cable_row', 'Seated cable row', 'cable row|cable rows|seated row|seated rows|machine row|low row', 'pull', 'mid_back:1 lats:0.8 rear_delts:0.4 biceps:0.5'],
-  ['t_bar_row', 'T-bar row', 't bar row|t-bar row|tbar row|chest supported row|seal row', 'pull', 'mid_back:1 lats:0.9 rear_delts:0.4 biceps:0.5'],
-  ['inverted_row', 'Inverted row', 'inverted row|inverted rows|australian pull ups|bodyweight row', 'pull', 'mid_back:1 lats:0.8 biceps:0.5 abs:0.3'],
-  ['meadows_row', 'Meadows row', 'meadows row|landmine row', 'pull', 'lats:1 mid_back:0.8 rear_delts:0.4 biceps:0.4'],
+  ['row', 'Barbell row', 'row|rows|barbell row|barbell rows|bent over row|bent over rows|pendlay row|yates row', 'pull', 'lats:1 mid_back:1 rear_delts:0.5 biceps:0.5 lower_back:0.5 forearms:0.25'],
+  ['db_row', 'Dumbbell row', 'dumbbell row|dumbbell rows|db row|db rows|single arm row|one arm row|one arm dumbbell row|kroc row', 'pull', 'lats:1 mid_back:1 rear_delts:0.5 biceps:0.5 forearms:0.25'],
+  ['cable_row', 'Seated cable row', 'cable row|cable rows|seated row|seated rows|machine row|low row', 'pull', 'mid_back:1 lats:1 rear_delts:0.5 biceps:0.5'],
+  ['t_bar_row', 'T-bar row', 't bar row|t-bar row|tbar row|chest supported row|seal row', 'pull', 'mid_back:1 lats:1 rear_delts:0.5 biceps:0.5'],
+  ['inverted_row', 'Inverted row', 'inverted row|inverted rows|australian pull ups|bodyweight row', 'pull', 'mid_back:1 lats:1 biceps:0.5 abs:0.25'],
+  ['meadows_row', 'Meadows row', 'meadows row|landmine row', 'pull', 'lats:1 mid_back:1 rear_delts:0.5 biceps:0.5'],
 
   // --------------------------------------------------------- pull: vertical
-  ['lat_pulldown', 'Lat pulldown', 'lat pulldown|lat pulldowns|pulldown|pulldowns|wide grip pulldown|close grip pulldown', 'pull', 'lats:1 biceps:0.5 mid_back:0.4 rear_delts:0.3'],
-  ['pull_up', 'Pull-ups', 'pull ups|pull up|pullups|weighted pull ups|wide grip pull ups', 'pull', 'lats:1 biceps:0.6 mid_back:0.5 forearms:0.4 abs:0.3'],
-  ['chin_up', 'Chin-ups', 'chin ups|chin up|chinups|weighted chin ups', 'pull', 'lats:1 biceps:0.8 mid_back:0.4 forearms:0.4'],
-  ['straight_arm_pulldown', 'Straight-arm pulldown', 'straight arm pulldown|straight arm pulldowns|lat prayer', 'pull', 'lats:1 triceps:0.3'],
-  ['pullover', 'Dumbbell pullover', 'pullover|pullovers|db pullover|dumbbell pullover|cable pullover', 'pull', 'lats:1 chest:0.5 triceps:0.3'],
+  ['lat_pulldown', 'Lat pulldown', 'lat pulldown|lat pulldowns|pulldown|pulldowns|wide grip pulldown|close grip pulldown', 'pull', 'lats:1 biceps:0.5 mid_back:0.5 rear_delts:0.25'],
+  ['pull_up', 'Pull-ups', 'pull ups|pull up|pullups|weighted pull ups|wide grip pull ups', 'pull', 'lats:1 biceps:0.5 mid_back:0.5 forearms:0.5 abs:0.25'],
+  ['chin_up', 'Chin-ups', 'chin ups|chin up|chinups|weighted chin ups', 'pull', 'lats:1 biceps:1 mid_back:0.5 forearms:0.5'],
+  ['straight_arm_pulldown', 'Straight-arm pulldown', 'straight arm pulldown|straight arm pulldowns|lat prayer', 'pull', 'lats:1 triceps:0.25'],
+  ['pullover', 'Dumbbell pullover', 'pullover|pullovers|db pullover|dumbbell pullover|cable pullover', 'pull', 'lats:1 chest:0.5 triceps:0.25'],
 
   // -------------------------------------------------- pull: rear delt, traps
-  ['face_pull', 'Face pulls', 'face pull|face pulls', 'pull', 'rear_delts:1 mid_back:0.5 traps:0.4'],
-  ['rear_delt_fly', 'Rear delt fly', 'rear delt fly|rear delt flys|reverse fly|reverse flyes|reverse pec deck', 'pull', 'rear_delts:1 mid_back:0.4'],
-  ['shrug', 'Shrugs', 'shrug|shrugs|barbell shrug|dumbbell shrug|trap bar shrug', 'pull', 'traps:1 forearms:0.3'],
+  ['face_pull', 'Face pulls', 'face pull|face pulls', 'pull', 'rear_delts:1 mid_back:0.5 traps:0.5'],
+  ['rear_delt_fly', 'Rear delt fly', 'rear delt fly|rear delt flys|reverse fly|reverse flyes|reverse pec deck', 'pull', 'rear_delts:1 mid_back:0.5'],
+  ['shrug', 'Shrugs', 'shrug|shrugs|barbell shrug|dumbbell shrug|trap bar shrug', 'pull', 'traps:1 forearms:0.25'],
 
   // ------------------------------------------------------------ pull: biceps
-  ['curl', 'Bicep curls', 'curl|curls|bicep curl|bicep curls|dumbbell curl|barbell curl|ez bar curl|cable curl', 'pull', 'biceps:1 forearms:0.4'],
-  ['hammer_curl', 'Hammer curls', 'hammer curl|hammer curls|rope hammer curl', 'pull', 'biceps:1 forearms:0.7'],
+  ['curl', 'Bicep curls', 'curl|curls|bicep curl|bicep curls|dumbbell curl|barbell curl|ez bar curl|cable curl', 'pull', 'biceps:1 forearms:0.5'],
+  ['hammer_curl', 'Hammer curls', 'hammer curl|hammer curls|rope hammer curl', 'pull', 'biceps:1 forearms:0.5'],
   ['preacher_curl', 'Preacher curls', 'preacher curl|preacher curls|spider curl|concentration curl', 'pull', 'biceps:1'],
   ['incline_curl', 'Incline curls', 'incline curl|incline curls|incline dumbbell curl', 'pull', 'biceps:1'],
   ['reverse_curl', 'Reverse curls', 'reverse curl|reverse curls', 'pull', 'forearms:1 biceps:0.5'],
   ['wrist_curl', 'Wrist curls', 'wrist curl|wrist curls|forearm curls|grip work|dead hang|dead hangs', 'pull', 'forearms:1'],
 
   // -------------------------------------------------------------------- core
-  ['plank', 'Plank', 'plank|planks|weighted plank', 'core', 'abs:1 obliques:0.4 glutes:0.2'],
-  ['side_plank', 'Side plank', 'side plank|side planks', 'core', 'obliques:1 abs:0.4'],
+  ['plank', 'Plank', 'plank|planks|weighted plank', 'core', 'abs:1 obliques:0.5 glutes:0.25'],
+  ['side_plank', 'Side plank', 'side plank|side planks', 'core', 'obliques:1 abs:0.5'],
   ['crunch', 'Crunches', 'crunch|crunches|sit ups|sit up|situps|weighted crunch|decline sit ups', 'core', 'abs:1'],
   ['cable_crunch', 'Cable crunch', 'cable crunch|cable crunches|kneeling cable crunch', 'core', 'abs:1'],
-  ['leg_raise', 'Leg raises', 'leg raise|leg raises|hanging leg raise|hanging leg raises|hanging knee raise|lying leg raises', 'core', 'abs:1 obliques:0.3'],
-  ['ab_rollout', 'Ab rollout', 'ab rollout|ab rollouts|ab wheel', 'core', 'abs:1 lats:0.3 obliques:0.3'],
+  ['leg_raise', 'Leg raises', 'leg raise|leg raises|hanging leg raise|hanging leg raises|hanging knee raise|lying leg raises', 'core', 'abs:1 obliques:0.25'],
+  ['ab_rollout', 'Ab rollout', 'ab rollout|ab rollouts|ab wheel', 'core', 'abs:1 lats:0.25 obliques:0.25'],
   ['russian_twist', 'Russian twists', 'russian twist|russian twists', 'core', 'obliques:1 abs:0.5'],
-  ['dead_bug', 'Dead bug', 'dead bug|dead bugs|deadbug', 'core', 'abs:1 obliques:0.3'],
-  ['bird_dog', 'Bird dog', 'bird dog|bird dogs', 'core', 'lower_back:1 abs:0.6 glutes:0.4'],
-  ['pallof_press', 'Pallof press', 'pallof press|pallof', 'core', 'obliques:1 abs:0.6'],
+  ['dead_bug', 'Dead bug', 'dead bug|dead bugs|deadbug', 'core', 'abs:1 obliques:0.25'],
+  ['bird_dog', 'Bird dog', 'bird dog|bird dogs', 'core', 'lower_back:1 abs:0.5 glutes:0.5'],
+  ['pallof_press', 'Pallof press', 'pallof press|pallof', 'core', 'obliques:1 abs:0.5'],
   ['woodchop', 'Cable woodchop', 'woodchop|woodchops|cable chop|wood chop', 'core', 'obliques:1 abs:0.5'],
-  ['mountain_climber', 'Mountain climbers', 'mountain climbers|mountain climber', 'core', 'abs:1 obliques:0.4 quads:0.4 front_delts:0.3'],
+  ['mountain_climber', 'Mountain climbers', 'mountain climbers|mountain climber', 'core', 'abs:1 obliques:0.5 quads:0.5 front_delts:0.25'],
   ['hollow_hold', 'Hollow hold', 'hollow hold|hollow holds|hollow body', 'core', 'abs:1'],
-  ['superman', 'Superman hold', 'superman|supermans|superman hold', 'core', 'lower_back:1 glutes:0.4'],
+  ['superman', 'Superman hold', 'superman|supermans|superman hold', 'core', 'lower_back:1 glutes:0.5'],
 
   // -------------------------------------------------------------------- full
-  ['clean', 'Power clean', 'clean|power clean|cleans|hang clean', 'full', 'glutes:1 hamstrings:0.7 quads:0.6 traps:0.7 lower_back:0.5 forearms:0.4'],
-  ['snatch', 'Snatch', 'snatch|snatches|power snatch', 'full', 'glutes:1 hamstrings:0.6 quads:0.6 traps:0.7 side_delts:0.5 lower_back:0.5'],
-  ['thruster', 'Thrusters', 'thruster|thrusters', 'full', 'quads:1 glutes:0.8 front_delts:0.8 triceps:0.5'],
-  ['burpee', 'Burpees', 'burpees|burpee', 'full', 'quads:1 chest:0.6 abs:0.5 glutes:0.5 triceps:0.4'],
-  ['box_jump', 'Box jumps', 'box jumps|box jump', 'legs', 'quads:1 glutes:0.8 calves:0.6'],
-  ['farmer_carry', 'Farmer carries', 'farmer carry|farmer carries|farmers walk|farmers carry|loaded carry|suitcase carry', 'full', 'forearms:1 traps:0.8 abs:0.5 obliques:0.4'],
-  ['sled', 'Sled push/pull', 'sled|sled push|sled pull|prowler', 'full', 'quads:1 glutes:0.9 calves:0.5 abs:0.3'],
-  ['battle_ropes', 'Battle ropes', 'battle ropes|battle rope', 'full', 'front_delts:1 side_delts:0.6 abs:0.5 forearms:0.5'],
-  ['wall_ball', 'Wall balls', 'wall ball|wall balls', 'full', 'quads:1 glutes:0.7 front_delts:0.7'],
-  ['turkish_getup', 'Turkish get-up', 'turkish get up|turkish getup|tgu', 'full', 'abs:1 obliques:0.7 front_delts:0.6 glutes:0.5'],
-  ['med_ball_slam', 'Medicine ball slams', 'ball slams|med ball slams|medicine ball slams|slam ball', 'full', 'abs:1 lats:0.6 front_delts:0.4'],
-  ['reverse_hyper', 'Reverse hyperextension', 'reverse hyper|reverse hyperextension|reverse hypers', 'legs', 'glutes:1 hamstrings:0.7 lower_back:0.5'],
-  ['copenhagen_plank', 'Copenhagen plank', 'copenhagen plank|copenhagen planks', 'core', 'adductors:1 obliques:0.6'],
-  ['jump_squat', 'Jump squats', 'jump squat|jump squats|squat jumps', 'legs', 'quads:1 glutes:0.8 calves:0.6'],
+  ['clean', 'Power clean', 'clean|power clean|cleans|hang clean', 'full', 'glutes:1 hamstrings:0.5 quads:0.5 traps:0.5 lower_back:0.5 forearms:0.5'],
+  ['snatch', 'Snatch', 'snatch|snatches|power snatch', 'full', 'glutes:1 hamstrings:0.5 quads:0.5 traps:0.5 side_delts:0.5 lower_back:0.5'],
+  ['thruster', 'Thrusters', 'thruster|thrusters', 'full', 'quads:1 glutes:1 front_delts:1 triceps:0.5'],
+  ['burpee', 'Burpees', 'burpees|burpee', 'full', 'quads:1 chest:0.5 abs:0.5 glutes:0.5 triceps:0.5'],
+  ['box_jump', 'Box jumps', 'box jumps|box jump', 'legs', 'quads:1 glutes:1 calves:0.5'],
+  ['farmer_carry', 'Farmer carries', 'farmer carry|farmer carries|farmers walk|farmers carry|loaded carry|suitcase carry', 'full', 'forearms:1 traps:1 abs:0.5 obliques:0.5'],
+  ['sled', 'Sled push/pull', 'sled|sled push|sled pull|prowler', 'full', 'quads:1 glutes:1 calves:0.5 abs:0.25'],
+  ['battle_ropes', 'Battle ropes', 'battle ropes|battle rope', 'full', 'front_delts:1 side_delts:0.5 abs:0.5 forearms:0.5'],
+  ['wall_ball', 'Wall balls', 'wall ball|wall balls', 'full', 'quads:1 glutes:0.5 front_delts:0.5'],
+  ['turkish_getup', 'Turkish get-up', 'turkish get up|turkish getup|tgu', 'full', 'abs:1 obliques:0.5 front_delts:0.5 glutes:0.5'],
+  ['med_ball_slam', 'Medicine ball slams', 'ball slams|med ball slams|medicine ball slams|slam ball', 'full', 'abs:1 lats:0.5 front_delts:0.5'],
+  ['reverse_hyper', 'Reverse hyperextension', 'reverse hyper|reverse hyperextension|reverse hypers', 'legs', 'glutes:1 hamstrings:0.5 lower_back:0.5'],
+  ['copenhagen_plank', 'Copenhagen plank', 'copenhagen plank|copenhagen planks', 'core', 'adductors:1 obliques:0.5'],
+  ['jump_squat', 'Jump squats', 'jump squat|jump squats|squat jumps', 'legs', 'quads:1 glutes:1 calves:0.5'],
 ]
 
 /** @typedef {{id:string,name:string,aliases:string[],group:string,muscles:Record<string,number>}} Exercise */
@@ -169,6 +176,17 @@ export const EXERCISES = ROWS.map(([id, name, aliases, group, muscles]) => ({
 }))
 
 export const EXERCISES_BY_ID = new Map(EXERCISES.map((e) => [e.id, e]))
+
+/** The 1st / 2nd / 3rd muscle groups of an exercise, by tier weight. */
+export function muscleTiers(exercise) {
+  const tiers = { primary: [], secondary: [], tertiary: [] }
+  for (const [muscle, share] of Object.entries(exercise.muscles)) {
+    if (share === 1) tiers.primary.push(muscle)
+    else if (share === 0.5) tiers.secondary.push(muscle)
+    else tiers.tertiary.push(muscle)
+  }
+  return tiers
+}
 
 /** Longest alias first so "incline bench" wins over "bench". */
 export const EXERCISE_ALIAS_INDEX = (() => {

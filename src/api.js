@@ -5,13 +5,13 @@
  * returns a Response, using only web-standard APIs available in both.
  */
 
-import { parseMeal, parseWorkout, activityKcal, reweighFoodItem } from './parse.js'
+import { parseMeal, parseWorkout, activityKcal, reweighFoodItem, suggestFoods, suggestWorkouts } from './parse.js'
 import { buildDay, buildWeek, summarisePeriod, targetsFor, climateAdjustedKcal, DEFAULT_PROFILE, BASELINE_LEVELS, GOALS, CLIMATES } from './engine.js'
 import { reviewDay, reviewWeek } from './coach.js'
 import { recommendMeals, suggestDay, buildTasteProfile } from './recommend.js'
 import { FOODS, FOODS_BY_ID } from './data/foods.js'
 import { ACTIVITIES } from './data/activities.js'
-import { issueToken, verifyToken, checkPasscode, extractToken, sessionCookie, clearedCookie } from './auth.js'
+import { issueToken, verifyToken, checkPasscode, extractToken, sessionCookie, clearedCookie, hashPasscode, verifyPasscodeHash } from './auth.js'
 import { aiReview, aiMealIdeas, isAiConfigured } from './ai.js'
 
 // ------------------------------------------------------------------- helpers
@@ -113,11 +113,54 @@ export async function handleApi(request, ctx) {
       return error(500, 'No passcode configured. Set the APP_PASSCODE secret before using the app.')
     }
     const body = await readJson(request)
-    if (!checkPasscode(body?.passcode, ctx.passcode)) {
-      return error(401, 'Wrong passcode.')
+    const submitted = String(body?.passcode || '')
+
+    // The APP_PASSCODE secret is the founding account and owns all
+    // pre-multi-user data. Everyone else lives in the users table.
+    if (checkPasscode(submitted, ctx.passcode)) {
+      const token = await issueToken(ctx.secret, 'owner')
+      return json({ token }, { headers: { 'set-cookie': sessionCookie(token) } })
     }
-    const token = await issueToken(ctx.secret)
-    return json({ token }, { headers: { 'set-cookie': sessionCookie(token) } })
+    for (const user of await ctx.store.listUsers()) {
+      if (await verifyPasscodeHash(submitted, user.salt, user.passcodeHash)) {
+        const token = await issueToken(ctx.secret, user.id)
+        return json({ token, name: user.name }, { headers: { 'set-cookie': sessionCookie(token) } })
+      }
+    }
+    return error(401, 'Wrong passcode.')
+  }
+
+  if (path === '/signup' && method === 'POST') {
+    const body = await readJson(request)
+    const passcode = String(body?.passcode || '').trim()
+    const name = String(body?.name || '').trim().slice(0, 40)
+
+    if (passcode.length < 4 || passcode.length > 64) {
+      return error(400, 'Pick a passcode of at least 4 characters.')
+    }
+    // The passcode IS the identity, so it has to be unique - including
+    // against the founder's, or a new user could shadow that account.
+    if (ctx.passcode && checkPasscode(passcode, ctx.passcode)) {
+      return error(409, 'That passcode is taken. Pick another.')
+    }
+    const users = await ctx.store.listUsers()
+    if (users.length >= 50) {
+      return error(403, 'User limit reached.')
+    }
+    for (const user of users) {
+      if (await verifyPasscodeHash(passcode, user.salt, user.passcodeHash)) {
+        return error(409, 'That passcode is taken. Pick another.')
+      }
+    }
+
+    const id = newId()
+    const { salt, hash } = await hashPasscode(passcode)
+    await ctx.store.createUser({ id, name, passcodeHash: hash, salt })
+    // Seed the profile so the new user starts from sane defaults + their name.
+    await ctx.store.setProfile(id, { ...DEFAULT_PROFILE, name })
+
+    const token = await issueToken(ctx.secret, id)
+    return json({ token, name }, { status: 201, headers: { 'set-cookie': sessionCookie(token) } })
   }
 
   if (path === '/logout' && method === 'POST') {
@@ -126,12 +169,14 @@ export async function handleApi(request, ctx) {
 
   // ---------------------------------------------------------- auth boundary
   const token = extractToken(request)
-  if (!(await verifyToken(token, ctx.secret))) {
+  const auth = await verifyToken(token, ctx.secret)
+  if (!auth) {
     return error(401, 'Not signed in.')
   }
+  const userId = auth.sub
 
   const { store } = ctx
-  const profile = await store.getProfile()
+  const profile = await store.getProfile(userId)
   const today = todayIn(profile.timezone)
 
   // ------------------------------------------------------------------ profile
@@ -147,7 +192,7 @@ export async function handleApi(request, ctx) {
     if (method === 'PUT') {
       const body = await readJson(request)
       const next = sanitiseProfile({ ...profile, ...body })
-      const saved = await store.setProfile(next)
+      const saved = await store.setProfile(userId, next)
       return json({ profile: saved, targets: targetsFor(saved, 0) })
     }
   }
@@ -156,10 +201,12 @@ export async function handleApi(request, ctx) {
   if (path === '/parse' && method === 'POST') {
     const body = await readJson(request)
     const kind = body?.kind === 'workout' ? 'workout' : 'meal'
+    const withSuggestions = (items, suggest) => items.map((item) =>
+      item.recognised ? item : { ...item, suggestions: suggest(item.raw) })
     if (kind === 'meal') {
-      return json({ kind, items: decorateFoodItems(parseMeal(body?.text || '')) })
+      return json({ kind, items: withSuggestions(decorateFoodItems(parseMeal(body?.text || '')), suggestFoods) })
     }
-    return json({ kind, items: decorateWorkoutItems(parseWorkout(body?.text || ''), profile) })
+    return json({ kind, items: withSuggestions(decorateWorkoutItems(parseWorkout(body?.text || ''), profile), suggestWorkouts) })
   }
 
   // ----------------------------------------------------------------- entries
@@ -174,9 +221,9 @@ export async function handleApi(request, ctx) {
         return error(400, 'Weight must be a sensible number of kilograms.')
       }
       const entry = { id: newId(), date, kind: 'weight', slot: null, raw: null, items: [], value, createdAt: new Date().toISOString() }
-      await store.addEntry(entry)
+      await store.addEntry(userId, entry)
       // Keep the profile weight current so energy targets track reality.
-      await store.setProfile({ ...profile, weightKg: value })
+      await store.setProfile(userId, { ...profile, weightKg: value })
       return json({ entry }, { status: 201 })
     }
 
@@ -186,7 +233,7 @@ export async function handleApi(request, ctx) {
         return error(400, 'Water should be between 50 and 3000 ml per entry.')
       }
       const entry = { id: newId(), date, kind: 'water', slot: null, raw: null, items: [], value, createdAt: new Date().toISOString() }
-      await store.addEntry(entry)
+      await store.addEntry(userId, entry)
       return json({ entry }, { status: 201 })
     }
 
@@ -213,7 +260,7 @@ export async function handleApi(request, ctx) {
       value: null,
       createdAt: new Date().toISOString(),
     }
-    await store.addEntry(entry)
+    await store.addEntry(userId, entry)
     return json({ entry }, { status: 201 })
   }
 
@@ -221,12 +268,12 @@ export async function handleApi(request, ctx) {
   if (entryMatch) {
     const id = entryMatch[1]
     if (method === 'DELETE') {
-      const removed = await store.deleteEntry(id)
+      const removed = await store.deleteEntry(userId, id)
       return removed ? json({ ok: true }) : error(404, 'Entry not found.')
     }
     if (method === 'PATCH') {
       const body = await readJson(request)
-      const existing = await store.getEntry(id)
+      const existing = await store.getEntry(userId, id)
       if (!existing) return error(404, 'Entry not found.')
 
       const patch = {}
@@ -237,10 +284,10 @@ export async function handleApi(request, ctx) {
       if (typeof body?.removeIndex === 'number') {
         const items = existing.items.filter((_, index) => index !== body.removeIndex)
         if (!items.length) {
-          await store.deleteEntry(id)
+          await store.deleteEntry(userId, id)
           return json({ entry: null, deleted: true })
         }
-        const updated = await store.updateEntry(id, { items })
+        const updated = await store.updateEntry(userId, id, { items })
         return json({ entry: updated })
       }
 
@@ -267,7 +314,7 @@ export async function handleApi(request, ctx) {
         }
       }
 
-      const updated = await store.updateEntry(id, patch)
+      const updated = await store.updateEntry(userId, id, patch)
       return json({ entry: updated })
     }
   }
@@ -278,7 +325,7 @@ export async function handleApi(request, ctx) {
     // A month of context: the coach reads streaks from it and the header shows
     // the logging streak, which caps at "30+".
     const from = addDays(date, -29)
-    const entries = await store.listEntries(from, date)
+    const entries = await store.listEntries(userId, from, date)
     const todaysEntries = entries.filter((e) => e.date === date)
     const { meals, workouts, weights, waters } = partition(todaysEntries)
 
@@ -326,7 +373,7 @@ export async function handleApi(request, ctx) {
       to = date
     }
 
-    const entries = await store.listEntries(from, to)
+    const entries = await store.listEntries(userId, from, to)
     const days = buildDayRange(profile, entries, from, to)
     const weighIns = entries
       .filter((e) => e.kind === 'weight')
@@ -339,7 +386,7 @@ export async function handleApi(request, ctx) {
   if (path === '/week' && method === 'GET') {
     const end = isValidDate(url.searchParams.get('end')) ? url.searchParams.get('end') : today
     const start = addDays(end, -6)
-    const entries = await store.listEntries(start, end)
+    const entries = await store.listEntries(userId, start, end)
     const days = buildDayRange(profile, entries, start, end)
     const week = buildWeek(days)
     return json({ start, end, week, days, review: reviewWeek(week, profile, days) })
@@ -350,7 +397,7 @@ export async function handleApi(request, ctx) {
     const to = isValidDate(url.searchParams.get('to')) ? url.searchParams.get('to') : today
     const days = Math.min(180, Math.max(1, Number(url.searchParams.get('days')) || 30))
     const from = addDays(to, -(days - 1))
-    const entries = await store.listEntries(from, to)
+    const entries = await store.listEntries(userId, from, to)
     const built = buildDayRange(profile, entries, from, to)
     const weights = entries
       .filter((e) => e.kind === 'weight')
@@ -365,13 +412,13 @@ export async function handleApi(request, ctx) {
     const force = url.searchParams.get('refresh') === '1'
 
     if (!force) {
-      const cached = await store.getReview(date)
+      const cached = await store.getReview(userId, date)
       // Only trust a cached review for a day that has already finished.
       if (cached && date < today && cached.ai === useAi) return json({ ...cached, cached: true })
     }
 
     const from = addDays(date, -13)
-    const entries = await store.listEntries(from, date)
+    const entries = await store.listEntries(userId, from, date)
     const days = buildDayRange(profile, entries, from, date)
     const day = days[days.length - 1]
     const rules = reviewDay(day, profile, days.slice(0, -1))
@@ -382,7 +429,7 @@ export async function handleApi(request, ctx) {
     }
 
     const payload = { date, day, review: rules, narrative, ai: useAi }
-    if (date < today) await store.setReview(date, payload)
+    if (date < today) await store.setReview(userId, date, payload)
     return json(payload)
   }
 
@@ -394,7 +441,7 @@ export async function handleApi(request, ctx) {
 
     // Ninety days of history is plenty to learn tastes from without making the
     // query heavy.
-    const historyEntries = await store.listEntries(addDays(date, -90), date)
+    const historyEntries = await store.listEntries(userId, addDays(date, -90), date)
     const history = historyEntries.filter((e) => e.kind === 'meal')
 
     const todaysEntries = historyEntries.filter((e) => e.date === date)
@@ -426,14 +473,14 @@ export async function handleApi(request, ctx) {
 
   if (path === '/plan' && method === 'GET') {
     const date = isValidDate(url.searchParams.get('date')) ? url.searchParams.get('date') : today
-    const historyEntries = await store.listEntries(addDays(date, -90), date)
+    const historyEntries = await store.listEntries(userId, addDays(date, -90), date)
     const history = historyEntries.filter((e) => e.kind === 'meal')
     const targets = targetsFor(profile, 0)
     return json(suggestDay({ profile, targets, history, today: date }))
   }
 
   if (path === '/taste' && method === 'GET') {
-    const entries = await store.listEntries(addDays(today, -90), today)
+    const entries = await store.listEntries(userId, addDays(today, -90), today)
     const taste = buildTasteProfile(entries.filter((e) => e.kind === 'meal'))
     return json({ favourites: taste.favourites, confident: taste.confident, totalItems: taste.totalItems })
   }

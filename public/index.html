@@ -48,11 +48,14 @@
     <h1>Fitness</h1>
     <p class="serif-sub">Private. Precise. Unsparing.</p>
     <form id="login-form">
+      <input id="signup-name" class="hidden" type="text" autocomplete="name"
+             placeholder="Your name (optional)" aria-label="Your name">
       <input id="passcode" type="password" inputmode="numeric" autocomplete="current-password"
              placeholder="Passcode" aria-label="Passcode">
-      <button class="btn primary" style="width:100%" type="submit">Unlock</button>
+      <button class="btn primary" style="width:100%" type="submit" id="login-submit">Unlock</button>
     </form>
     <p id="login-error" class="login-err"></p>
+    <button class="login-switch" id="login-switch" type="button">New here? Create your passcode</button>
   </div>
 </section>
 

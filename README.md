@@ -30,6 +30,11 @@ of the day it tells you — bluntly — whether the day moved you forward or not
   your remaining calories, and what you haven't had recently.
 - **Works from your phone.** Add to home screen and it behaves like an app.
 - **Free to run.** No hosting cost on the recommended setup.
+- **Multi-user.** "New here? Create your passcode" on the login screen gives
+  someone their own account in one step. The passcode is the identity; every
+  account's food, training, water, profile and reviews are fully separate.
+- **Did-you-mean.** Typos and near-misses get suggestion chips instead of a
+  dead end - "chiken brest" offers Chicken breast; one tap fixes the entry.
 
 ---
 
@@ -64,6 +69,17 @@ npm run deploy
 
 Wrangler prints a URL like `https://fitness.<your-account>.workers.dev`. Open
 it on your phone, enter the passcode, then **Share → Add to Home Screen**.
+
+**Upgrading an existing single-user database to multi-user** is a one-time
+step, run before deploying the multi-user code:
+
+```bash
+npm run db:migrate
+```
+
+All existing data stays owned by the APP_PASSCODE account. Running it a
+second time fails with "duplicate column name" - that just means it has
+already been applied.
 
 `npm run setup` is safe to re-run — it reuses an existing database rather than
 making a second one, and stops without touching anything if you aren't signed
@@ -109,7 +125,7 @@ APP_PASSCODE=letmein npm start
 Local data goes to `data/fitness.json`.
 
 ```bash
-npm test        # 50 tests over the parser, energy maths, coach and recommender
+npm test        # 60 tests over the parser, auth, multi-user isolation,, energy maths, coach and recommender
 ```
 
 ## Self-hosting (VPS, home server, anything that runs Node)

@@ -45,11 +45,12 @@ const TOKEN_TTL_DAYS = 60
 
 /**
  * @param {string} secret signing secret
+ * @param {string} [sub] user id carried inside the token
  * @param {number} [ttlDays]
  */
-export async function issueToken(secret, ttlDays = TOKEN_TTL_DAYS) {
+export async function issueToken(secret, sub = 'owner', ttlDays = TOKEN_TTL_DAYS) {
   const payload = {
-    sub: 'owner',
+    sub,
     exp: Date.now() + ttlDays * 86_400_000,
     iat: Date.now(),
   }
@@ -60,12 +61,14 @@ export async function issueToken(secret, ttlDays = TOKEN_TTL_DAYS) {
 }
 
 /**
- * @returns {Promise<boolean>} whether the token is well-formed, signed and unexpired
+ * @returns {Promise<{sub:string}|null>} the token payload when valid, else null.
+ * Tokens issued before multi-user carried sub "owner", so old sessions keep
+ * working unchanged.
  */
 export async function verifyToken(token, secret) {
-  if (!token || typeof token !== 'string') return false
+  if (!token || typeof token !== 'string') return null
   const [body, signature] = token.split('.')
-  if (!body || !signature) return false
+  if (!body || !signature) return null
 
   try {
     const key = await hmacKey(secret)
@@ -75,13 +78,58 @@ export async function verifyToken(token, secret) {
       fromBase64url(signature),
       encoder.encode(body)
     )
-    if (!valid) return false
+    if (!valid) return null
 
     const payload = JSON.parse(new TextDecoder().decode(fromBase64url(body)))
-    return typeof payload.exp === 'number' && payload.exp > Date.now()
+    if (typeof payload.exp !== 'number' || payload.exp <= Date.now()) return null
+    return { sub: typeof payload.sub === 'string' && payload.sub ? payload.sub : 'owner' }
   } catch {
-    return false
+    return null
   }
+}
+
+// -------------------------------------------------------- passcode hashing
+
+/**
+ * PBKDF2-SHA256 at 1,000 iterations. Deliberately light: Workers' free tier
+ * allows ~10 ms of CPU per request and login verifies against every stored
+ * user, so a heavyweight KDF would blow the budget. The honest note is that
+ * short passcodes are the real weakness here, not the iteration count -
+ * anyone who can dump the database of a passcode-only app has already won.
+ */
+const PBKDF2_ITERATIONS = 1000
+
+function toHex(bytes) {
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+function fromHex(hex) {
+  return Uint8Array.from(hex.match(/.{2}/g) || [], (pair) => parseInt(pair, 16))
+}
+
+async function pbkdf2(passcode, saltBytes) {
+  const material = await crypto.subtle.importKey(
+    'raw', encoder.encode(String(passcode)), 'PBKDF2', false, ['deriveBits']
+  )
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: saltBytes, iterations: PBKDF2_ITERATIONS },
+    material,
+    256
+  )
+  return new Uint8Array(bits)
+}
+
+/** @returns {Promise<{salt:string, hash:string}>} hex-encoded */
+export async function hashPasscode(passcode) {
+  const saltBytes = crypto.getRandomValues(new Uint8Array(16))
+  const hash = await pbkdf2(passcode, saltBytes)
+  return { salt: toHex(saltBytes), hash: toHex(hash) }
+}
+
+export async function verifyPasscodeHash(passcode, salt, expectedHash) {
+  if (!salt || !expectedHash) return false
+  const hash = toHex(await pbkdf2(passcode, fromHex(salt)))
+  return timingSafeEqual(hash, expectedHash)
 }
 
 /** Check a submitted passcode against the configured one. */

@@ -621,6 +621,19 @@ nav.tabs button[aria-current='true'] { color: var(--accent); font-weight: 600; }
 }
 .login input:focus { outline: none; border-color: var(--accent); }
 .login-err { color: var(--bad); font-size: 0.82rem; min-height: 1.2em; margin-top: 10px; }
+.login-switch { color: var(--muted); font-size: 0.84rem; margin-top: 18px; text-decoration: underline; text-underline-offset: 3px; }
+.login-switch:hover { color: var(--accent); }
+
+.didyoumean { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; grid-column: 1 / -1; }
+.didyoumean .lead { color: var(--faint); font-size: 0.74rem; align-self: center; }
+.didyoumean button {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+  border-radius: 99px;
+  padding: 5px 12px;
+  font-size: 0.76rem;
+}
 
 /* ------------------------------------------------------------------ toast */
 

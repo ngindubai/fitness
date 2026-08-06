@@ -628,4 +628,92 @@ export function activityKcal(item, weightKg) {
   return Math.max(0, Math.round(gross - resting))
 }
 
+// ------------------------------------------------------- fuzzy suggestions
+
+/**
+ * Small-edit distance, capped: we only care whether two words are within a
+ * couple of typos of each other, so bail out early on length gaps.
+ */
+function editDistance(a, b, cap = 3) {
+  if (Math.abs(a.length - b.length) > cap) return cap + 1
+  const prev = new Array(b.length + 1)
+  for (let j = 0; j <= b.length; j += 1) prev[j] = j
+  for (let i = 1; i <= a.length; i += 1) {
+    let diag = prev[0]
+    prev[0] = i
+    let rowMin = i
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      const next = Math.min(prev[j] + 1, prev[j - 1] + 1, diag + cost)
+      diag = prev[j]
+      prev[j] = next
+      if (next < rowMin) rowMin = next
+    }
+    if (rowMin > cap) return cap + 1
+  }
+  return prev[b.length]
+}
+
+/** How alike two single words are, 0..1, tolerant of a typo or two. */
+function wordSimilarity(a, b) {
+  if (a === b) return 1
+  if (a.startsWith(b) || b.startsWith(a)) return 0.85
+  const distance = editDistance(a, b)
+  const longest = Math.max(a.length, b.length)
+  if (distance > Math.min(3, Math.floor(longest / 3) + 1)) return 0
+  return 1 - distance / longest
+}
+
+/**
+ * Fuzzy score between a typed phrase and a candidate term: the average, over
+ * the term's words, of the best-matching typed word. "chiken brest" scores
+ * high against "chicken breast"; "shwarma" against "shawarma".
+ */
+function fuzzyScore(phraseTokens, term) {
+  const termTokens = term.split(/\s+/).filter((w) => w.length > 1)
+  if (!termTokens.length) return 0
+  let total = 0
+  for (const termWord of termTokens) {
+    let best = 0
+    for (const typed of phraseTokens) {
+      const similarity = wordSimilarity(typed, termWord)
+      if (similarity > best) best = similarity
+    }
+    total += best
+  }
+  return total / termTokens.length
+}
+
+function suggestFrom(indexEntries, phrase, limit, getId, getName) {
+  const tokens = tokenise(phrase).filter((w) => w.length > 2 && !/^\d/.test(w))
+  if (!tokens.length) return []
+
+  const best = new Map() // id -> {score, name}
+  for (const entry of indexEntries) {
+    const score = fuzzyScore(tokens, entry.term)
+    if (score < 0.62) continue
+    const id = getId(entry)
+    const existing = best.get(id)
+    if (!existing || score > existing.score) best.set(id, { score, name: getName(entry) })
+  }
+  return [...best.entries()]
+    .sort((a, b) => b[1].score - a[1].score)
+    .slice(0, limit)
+    .map(([id, { name }]) => ({ id, name }))
+}
+
+/** Closest foods to an unrecognised phrase — the "did you mean" list. */
+export function suggestFoods(phrase, limit = 3) {
+  return suggestFrom(ALIAS_INDEX, phrase, limit, (e) => e.food.id, (e) => e.food.name)
+}
+
+/** Closest activities and lifts to an unrecognised workout phrase. */
+export function suggestWorkouts(phrase, limit = 3) {
+  const activities = suggestFrom(ACTIVITY_ALIAS_INDEX, phrase, limit, (e) => e.activity.id, (e) => e.activity.name)
+  const lifts = suggestFrom(EXERCISE_ALIAS_INDEX, phrase, limit, (e) => e.exercise.id, (e) => e.exercise.name)
+  const merged = [...lifts, ...activities]
+  const seen = new Set()
+  return merged.filter((s) => !seen.has(s.name) && seen.add(s.name)).slice(0, limit)
+}
+
 export { normalise, splitItems, round }

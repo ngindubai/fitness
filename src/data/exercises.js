@@ -14,11 +14,11 @@
 // prettier-ignore
 const ROWS = [
   // -------------------------------------------------------------------- legs
-  ['squat', 'Back squat', 'squat|squats|back squat|barbell squat', 'legs'],
+  ['squat', 'Back squat', 'squat|squats|back squat|barbell squat|goblet squat|smith squat|pause squat', 'legs'],
   ['front_squat', 'Front squat', 'front squat|front squats', 'legs'],
   ['hack_squat', 'Hack squat', 'hack squat', 'legs'],
   ['leg_press', 'Leg press', 'leg press', 'legs'],
-  ['deadlift', 'Deadlift', 'deadlift|deadlifts|conventional deadlift', 'full'],
+  ['deadlift', 'Deadlift', 'deadlift|deadlifts|conventional deadlift|sumo deadlift|trap bar deadlift|rack pull', 'full'],
   ['rdl', 'Romanian deadlift', 'rdl|romanian deadlift|romanian deadlifts|stiff leg deadlift', 'legs'],
   ['hip_thrust', 'Hip thrust', 'hip thrust|hip thrusts|glute bridge', 'legs'],
   ['lunge', 'Lunges', 'lunge|lunges|walking lunges|split squat|bulgarian split squat', 'legs'],
@@ -28,10 +28,10 @@ const ROWS = [
   ['good_morning', 'Good mornings', 'good morning|good mornings', 'legs'],
 
   // -------------------------------------------------------------------- push
-  ['bench', 'Bench press', 'bench|bench press|flat bench|barbell bench', 'push'],
+  ['bench', 'Bench press', 'bench|bench press|flat bench|barbell bench|close grip bench|decline bench|paused bench', 'push'],
   ['incline_bench', 'Incline bench press', 'incline bench|incline press|incline bench press', 'push'],
   ['db_press', 'Dumbbell press', 'dumbbell press|db press|dumbbell bench|db bench', 'push'],
-  ['ohp', 'Overhead press', 'ohp|overhead press|shoulder press|military press|strict press', 'push'],
+  ['ohp', 'Overhead press', 'ohp|overhead press|shoulder press|shoulder press machine|military press|strict press|arnold press', 'push'],
   ['dip', 'Dips', 'dip|dips|weighted dips', 'push'],
   ['press_up', 'Press-ups', 'press ups|press up|push ups|push up|pushups', 'push'],
   ['chest_fly', 'Chest fly', 'chest fly|chest flys|chest flyes|pec deck|cable crossover|cable fly', 'push'],
@@ -39,7 +39,7 @@ const ROWS = [
   ['tricep_pushdown', 'Tricep pushdown', 'tricep pushdown|tricep pushdowns|pushdowns|tricep extension|tricep extensions|skull crushers|skullcrushers', 'push'],
 
   // -------------------------------------------------------------------- pull
-  ['row', 'Barbell row', 'row|rows|barbell row|barbell rows|bent over row|bent over rows|pendlay row', 'pull'],
+  ['row', 'Barbell row', 'row|rows|barbell row|barbell rows|bent over row|bent over rows|pendlay row|t bar row|chest supported row', 'pull'],
   ['db_row', 'Dumbbell row', 'dumbbell row|dumbbell rows|db row|db rows|single arm row', 'pull'],
   ['cable_row', 'Cable row', 'cable row|cable rows|seated row|seated rows|machine row', 'pull'],
   ['lat_pulldown', 'Lat pulldown', 'lat pulldown|lat pulldowns|pulldown|pulldowns', 'pull'],
@@ -49,6 +49,17 @@ const ROWS = [
   ['face_pull', 'Face pulls', 'face pull|face pulls', 'pull'],
   ['shrug', 'Shrugs', 'shrug|shrugs', 'pull'],
   ['rear_delt_fly', 'Rear delt fly', 'rear delt fly|rear delt flys|reverse fly|reverse flyes', 'pull'],
+
+  ['chest_press_machine', 'Chest press (machine)', 'chest press|chest press machine|machine press', 'push'],
+  ['hip_abduction', 'Hip abduction/adduction', 'hip abduction|hip adduction|abductor|adductor|abductor machine', 'legs'],
+  ['back_extension', 'Back extension', 'back extension|back extensions|hyperextension|hyperextensions|45 degree back extension', 'pull'],
+  ['step_up', 'Step-ups', 'step ups|step up|weighted step ups', 'legs'],
+  ['box_jump', 'Box jumps', 'box jumps|box jump', 'legs'],
+  ['burpee', 'Burpees', 'burpees|burpee', 'full'],
+  ['pullover', 'Dumbbell pullover', 'pullover|pullovers|db pullover|dumbbell pullover', 'pull'],
+  ['landmine_press', 'Landmine press', 'landmine press|landmine', 'push'],
+  ['upright_row', 'Upright row', 'upright row|upright rows', 'pull'],
+  ['glute_kickback', 'Glute kickback', 'glute kickback|glute kickbacks|cable kickback|donkey kicks', 'legs'],
 
   // -------------------------------------------------------------------- core
   ['plank', 'Plank', 'plank|planks', 'core'],

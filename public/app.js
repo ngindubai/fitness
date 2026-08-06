@@ -35,7 +35,9 @@ async function api(path, options = {}) {
       ...(options.headers || {}),
     },
   })
-  if (response.status === 401) {
+  // A 401 on /login or /signup is a wrong passcode, not an expired session -
+  // let the real error message through for those.
+  if (response.status === 401 && path !== '/login' && path !== '/signup') {
     signOut()
     throw new Error('Session expired. Sign in again.')
   }
@@ -92,17 +94,39 @@ document.querySelectorAll('[data-theme-toggle]').forEach((button) => {
 
 // -------------------------------------------------------------------- auth
 
+let signupMode = false
+
+function setSignupMode(on) {
+  signupMode = on
+  $('signup-name').classList.toggle('hidden', !on)
+  $('login-submit').textContent = on ? 'Create & enter' : 'Unlock'
+  $('login-switch').textContent = on
+    ? 'Already have a passcode? Sign in'
+    : 'New here? Create your passcode'
+  $('login-error').textContent = ''
+}
+
+$('login-switch').addEventListener('click', () => {
+  setSignupMode(!signupMode)
+  ;(signupMode ? $('signup-name') : $('passcode')).focus()
+})
+
 $('login-form').addEventListener('submit', async (event) => {
   event.preventDefault()
   $('login-error').textContent = ''
   try {
-    const { token } = await api('/login', {
+    const { token } = await api(signupMode ? '/signup' : '/login', {
       method: 'POST',
-      body: JSON.stringify({ passcode: $('passcode').value }),
+      body: JSON.stringify({
+        passcode: $('passcode').value,
+        ...(signupMode ? { name: $('signup-name').value } : {}),
+      }),
     })
     state.token = token
     localStorage.setItem('ff_token', token)
     $('passcode').value = ''
+    $('signup-name').value = ''
+    setSignupMode(false)   // next visitor to this screen is signing in
     await boot()
   } catch (error) {
     $('login-error').textContent = error.message
@@ -111,7 +135,11 @@ $('login-form').addEventListener('submit', async (event) => {
 
 function signOut() {
   state.token = null
+  state.profile = null
+  state.dayCache = null
+  state.calMarks = {}
   localStorage.removeItem('ff_token')
+  setSignupMode(false)
   $('app').classList.add('hidden')
   $('login').classList.remove('hidden')
 }
@@ -336,6 +364,26 @@ function renderPreview(items) {
     const left = document.createElement('div')
     if (!item.recognised) {
       left.innerHTML = `<div>${escapeHtml(item.raw)}</div><div class="sub">Not recognised — this won't be counted</div>`
+      if (item.suggestions?.length) {
+        const chips = document.createElement('div')
+        chips.className = 'didyoumean'
+        chips.innerHTML = '<span class="lead">Did you mean</span>'
+        for (const suggestion of item.suggestions) {
+          const chip = document.createElement('button')
+          chip.type = 'button'
+          chip.textContent = suggestion.name
+          chip.addEventListener('click', () => {
+            // Swap the unrecognised phrase for the suggestion, keeping any
+            // leading quantity ("2 shwarma" -> "2 Chicken shawarma (wrap)").
+            const quantity = item.raw.match(/^[\d.]+\s*/)?.[0] || ''
+            const cleanName = suggestion.name.replace(/\s*\(.*?\)\s*$/, '')
+            $('entry-text').value = $('entry-text').value.replace(item.raw, quantity + cleanName)
+            previewParse()
+          })
+          chips.appendChild(chip)
+        }
+        row.appendChild(chips)
+      }
     } else if (state.kind === 'meal') {
       const portion = item.portion ? ` · about ${item.portion.count} ${escapeHtml(item.portion.unit)}` : ''
       left.innerHTML = `<div>${escapeHtml(item.name)}</div><div class="sub">${item.kcal} kcal · ${item.protein} g protein${portion}</div>`
@@ -442,7 +490,10 @@ async function loadDay() {
   const data = await api(`/day?date=${state.date}`)
   state.dayCache = data
 
-  $('greeting').textContent = labelForDate(state.date)
+  const name = state.profile?.name ? state.profile.name.split(' ')[0] : ''
+  $('greeting').textContent = state.date === state.today && name
+    ? `${labelForDate(state.date)}, ${name}`
+    : labelForDate(state.date)
   $('date-label').textContent = fmtDate(state.date, { day: 'numeric', month: 'long', year: 'numeric' })
   $('next-day').disabled = state.date >= state.today
   const streak = `${data.streak} day${data.streak === 1 ? '' : 's'}`

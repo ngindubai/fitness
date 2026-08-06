@@ -1,8 +1,9 @@
 /**
- * Cloudflare D1 storage adapter.
+ * Cloudflare D1 storage adapter — multi-user.
  *
- * D1 is SQLite, so the schema in schema.sql is the single source of truth and
- * the Node adapter mirrors this interface exactly.
+ * Every read and write is scoped by user id. The original single-user data
+ * carries user id 'owner' (see migrations/002-multi-tenant.sql), and the
+ * APP_PASSCODE login maps to that id, so nothing moved for the first user.
  */
 
 import { DEFAULT_PROFILE } from '../engine.js'
@@ -13,51 +14,85 @@ export class D1Store {
     this.db = db
   }
 
-  async getProfile() {
-    const row = await this.db.prepare('SELECT data FROM profile WHERE id = 1').first()
+  // ---------------------------------------------------------------- users
+
+  async listUsers() {
+    const { results } = await this.db
+      .prepare('SELECT id, name, passcode_hash, salt, created_at FROM users')
+      .all()
+    return (results || []).map((row) => ({
+      id: row.id,
+      name: row.name,
+      passcodeHash: row.passcode_hash,
+      salt: row.salt,
+      createdAt: row.created_at,
+    }))
+  }
+
+  async createUser({ id, name, passcodeHash, salt }) {
+    await this.db
+      .prepare('INSERT INTO users (id, name, passcode_hash, salt, created_at) VALUES (?, ?, ?, ?, ?)')
+      .bind(id, name || null, passcodeHash, salt, new Date().toISOString())
+      .run()
+    return { id, name }
+  }
+
+  // -------------------------------------------------------------- profile
+
+  async getProfile(userId) {
+    const row = await this.db
+      .prepare('SELECT data FROM profiles WHERE user_id = ?')
+      .bind(userId)
+      .first()
     if (!row) return { ...DEFAULT_PROFILE }
     return { ...DEFAULT_PROFILE, ...JSON.parse(row.data) }
   }
 
-  async setProfile(profile) {
+  async setProfile(userId, profile) {
     const merged = { ...DEFAULT_PROFILE, ...profile }
     await this.db
       .prepare(
-        `INSERT INTO profile (id, data, updated_at) VALUES (1, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`
+        `INSERT INTO profiles (user_id, data, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`
       )
-      .bind(JSON.stringify(merged), new Date().toISOString())
+      .bind(userId, JSON.stringify(merged), new Date().toISOString())
       .run()
     return merged
   }
 
-  async listEntries(fromDate, toDate) {
+  // -------------------------------------------------------------- entries
+
+  async listEntries(userId, fromDate, toDate) {
     const { results } = await this.db
       .prepare(
         `SELECT id, date, kind, slot, raw, items, value, created_at
-         FROM entries WHERE date >= ? AND date <= ? ORDER BY date ASC, created_at ASC`
+         FROM entries WHERE user_id = ? AND date >= ? AND date <= ?
+         ORDER BY date ASC, created_at ASC`
       )
-      .bind(fromDate, toDate)
+      .bind(userId, fromDate, toDate)
       .all()
     return (results || []).map(hydrate)
   }
 
-  async getEntry(id) {
+  async getEntry(userId, id) {
     const row = await this.db
-      .prepare('SELECT id, date, kind, slot, raw, items, value, created_at FROM entries WHERE id = ?')
-      .bind(id)
+      .prepare(
+        'SELECT id, date, kind, slot, raw, items, value, created_at FROM entries WHERE id = ? AND user_id = ?'
+      )
+      .bind(id, userId)
       .first()
     return row ? hydrate(row) : null
   }
 
-  async addEntry(entry) {
+  async addEntry(userId, entry) {
     await this.db
       .prepare(
-        `INSERT INTO entries (id, date, kind, slot, raw, items, value, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO entries (id, user_id, date, kind, slot, raw, items, value, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         entry.id,
+        userId,
         entry.date,
         entry.kind,
         entry.slot ?? null,
@@ -70,12 +105,15 @@ export class D1Store {
     return entry
   }
 
-  async updateEntry(id, patch) {
-    const existing = await this.getEntry(id)
+  async updateEntry(userId, id, patch) {
+    const existing = await this.getEntry(userId, id)
     if (!existing) return null
     const next = { ...existing, ...patch }
     await this.db
-      .prepare(`UPDATE entries SET date = ?, kind = ?, slot = ?, raw = ?, items = ?, value = ? WHERE id = ?`)
+      .prepare(
+        `UPDATE entries SET date = ?, kind = ?, slot = ?, raw = ?, items = ?, value = ?
+         WHERE id = ? AND user_id = ?`
+      )
       .bind(
         next.date,
         next.kind,
@@ -83,29 +121,38 @@ export class D1Store {
         next.raw ?? null,
         JSON.stringify(next.items ?? []),
         next.value ?? null,
-        id
+        id,
+        userId
       )
       .run()
     return next
   }
 
-  async deleteEntry(id) {
-    const result = await this.db.prepare('DELETE FROM entries WHERE id = ?').bind(id).run()
+  async deleteEntry(userId, id) {
+    const result = await this.db
+      .prepare('DELETE FROM entries WHERE id = ? AND user_id = ?')
+      .bind(id, userId)
+      .run()
     return (result.meta?.changes ?? 0) > 0
   }
 
-  async getReview(date) {
-    const row = await this.db.prepare('SELECT data FROM reviews WHERE date = ?').bind(date).first()
+  // -------------------------------------------------------------- reviews
+
+  async getReview(userId, date) {
+    const row = await this.db
+      .prepare('SELECT data FROM reviews WHERE user_id = ? AND date = ?')
+      .bind(userId, date)
+      .first()
     return row ? JSON.parse(row.data) : null
   }
 
-  async setReview(date, data) {
+  async setReview(userId, date, data) {
     await this.db
       .prepare(
-        `INSERT INTO reviews (date, data, created_at) VALUES (?, ?, ?)
-         ON CONFLICT(date) DO UPDATE SET data = excluded.data, created_at = excluded.created_at`
+        `INSERT INTO reviews (user_id, date, data, created_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id, date) DO UPDATE SET data = excluded.data, created_at = excluded.created_at`
       )
-      .bind(date, JSON.stringify(data), new Date().toISOString())
+      .bind(userId, date, JSON.stringify(data), new Date().toISOString())
       .run()
     return data
   }

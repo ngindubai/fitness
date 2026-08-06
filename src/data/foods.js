@@ -217,11 +217,21 @@ const ROWS = [
   ['milkshake', 'Milkshake', 'milkshake|shake', 112, 3.5, 18, 3, 0, 17, 'cup', 300, 'drink sugary junk'],
 
   // --------------------------------------------------------------- alcohol
-  ['beer_lager', 'Lager / beer (4.5%)', 'beer|lager|pint|pint of lager|ale', 43, 0.5, 3.6, 0, 0, 0.3, 'pint', 568, 'alcohol drink'],
-  ['beer_strong', 'Strong beer / IPA (6%)', 'ipa|craft beer|strong beer', 57, 0.6, 4.5, 0, 0, 0.4, 'pint', 568, 'alcohol drink'],
-  ['cider', 'Cider', 'cider', 45, 0, 5.3, 0, 0, 5.3, 'pint', 568, 'alcohol drink sugary'],
-  ['wine_red', 'Red wine', 'red wine|wine|glass of wine', 85, 0.1, 2.6, 0, 0, 0.6, 'glass', 175, 'alcohol drink'],
-  ['wine_white', 'White wine', 'white wine', 82, 0.1, 2.6, 0, 0, 1, 'glass', 175, 'alcohol drink'],
+  ['beer_lager', 'Lager / beer (4.5%)', 'beer|lager|pint|pint of lager|ale', 43, 0.5, 3.6, 0, 0, 0.3, 'pint', 568, 'alcohol drink beer'],
+  ['beer_strong', 'Strong beer / IPA (6%)', 'ipa|craft beer|strong beer|pale ale', 57, 0.6, 4.5, 0, 0, 0.4, 'pint', 568, 'alcohol drink beer'],
+  ['cider', 'Cider', 'cider', 45, 0, 5.3, 0, 0, 5.3, 'pint', 568, 'alcohol drink beer sugary'],
+  ['wine_red', 'Red wine', 'red wine|wine|glass of wine|merlot|shiraz|syrah|malbec|rioja|cabernet|cab sav|cabernet sauvignon|pinot noir|tempranillo|chianti|claret', 85, 0.1, 2.6, 0, 0, 0.6, 'glass', 175, 'alcohol drink wine'],
+  ['wine_white', 'White wine', 'white wine|sauvignon blanc|chardonnay|pinot grigio|pinot gris|riesling|albarino|chenin blanc|verdejo', 82, 0.1, 2.6, 0, 0, 1, 'glass', 175, 'alcohol drink wine'],
+
+  // Stouts and craft cans. Serving size matters more than the per-100 ml
+  // figures here: a 330 ml can logged as a 568 ml pint overstates by 70%.
+  ['guinness', 'Guinness Draught (4.2%)', 'guinness|guinness draught|draught guinness|stout|dry stout', 37, 0.3, 3.2, 0, 0, 0.2, 'pint', 568, 'alcohol drink beer'],
+  ['guinness_extra', 'Guinness Extra Stout (5.6%)', 'guinness extra|guinness extra stout|extra stout|foreign extra', 46, 0.3, 4.2, 0, 0, 0.3, 'bottle', 330, 'alcohol drink beer'],
+  ['guinness_zero', 'Guinness 0.0', 'guinness 0.0|guinness zero|guinness 0|guinness nitro zero', 16, 0.3, 3.4, 0, 0, 0.2, 'pint', 568, 'drink beer zero'],
+  ['brewdog_punk', 'BrewDog Punk IPA (5.4%)', 'brewdog|brew dog|punk ipa|brewdog punk', 45, 0.4, 3.5, 0, 0, 0.2, 'can', 330, 'alcohol drink beer'],
+  ['brewdog_hazy', 'BrewDog Hazy Jane (5%)', 'hazy jane|brewdog hazy', 44, 0.4, 3.6, 0, 0, 0.3, 'can', 330, 'alcohol drink beer'],
+  ['lost_lager', 'BrewDog Lost Lager (4.7%)', 'lost lager|brewdog lager', 40, 0.3, 2.8, 0, 0, 0.2, 'can', 330, 'alcohol drink beer'],
+  ['brewdog_af', 'BrewDog Punk AF (0.5%)', 'punk af|brewdog af|alcohol free beer|non alcoholic beer|af beer', 15, 0.4, 3.2, 0, 0, 0.5, 'can', 330, 'drink beer zero'],
   ['spirits', 'Spirits (40%)', 'vodka|gin|whisky|whiskey|rum|spirits|shot', 231, 0, 0, 0, 0, 0, 'single', 25, 'alcohol drink'],
   ['cocktail', 'Cocktail (average)', 'cocktail|mojito|margarita', 160, 0.2, 18, 0, 0, 17, 'glass', 200, 'alcohol drink sugary'],
   ['gin_tonic', 'Gin & tonic', 'gin and tonic|g and t|gin tonic', 60, 0, 6, 0, 0, 6, 'glass', 250, 'alcohol drink'],
@@ -627,6 +637,49 @@ export const FOODS = ROWS.map(
 )
 
 export const FOODS_BY_ID = new Map(FOODS.map((f) => [f.id, f]))
+
+/**
+ * Alcohol by volume, as a percentage, for every drink that contains any.
+ *
+ * Kept beside the food table rather than inside a row because it drives a
+ * different number: UK alcohol units, where one unit is 10 ml of pure
+ * ethanol. Units are what the drinking guideline is written in (no more than
+ * 14 a week), and calories alone do not tell you whether you are near it —
+ * a 175 ml glass of red is 2.3 units but only 149 kcal, less than a banana
+ * and a coffee.
+ *
+ * Mixed drinks carry the ABV of the finished glass, not of the spirit in it:
+ * a gin and tonic is a 25 ml measure of 40% in a 250 ml glass, so 4%.
+ */
+export const ABV = {
+  beer_lager: 4.5,
+  beer_strong: 6,
+  cider: 4.5,
+  wine_red: 13,
+  wine_white: 12,
+  rose_wine: 12,
+  prosecco: 11.5,
+  spirits: 40,
+  cocktail: 10,
+  gin_tonic: 4,
+  baileys: 17,
+  aperol_spritz: 11,
+  guinness: 4.2,
+  guinness_extra: 5.6,
+  brewdog_punk: 5.4,
+  brewdog_hazy: 5,
+  lost_lager: 4.7,
+  // Deliberately absent: the 0.0 and AF entries. At 0.5% a whole can is
+  // 0.17 units, which is noise, and counting it would discourage the one
+  // swap that actually helps.
+}
+
+/** UK units in a serving. One unit = 10 ml of pure ethanol. */
+export function unitsFor(foodId, ml) {
+  const abv = ABV[foodId]
+  if (!abv || !ml) return 0
+  return Math.round(((ml * abv) / 1000) * 10) / 10
+}
 
 /**
  * Alias lookup table. Aliases are stored longest-first so that a phrase like

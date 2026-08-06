@@ -414,7 +414,8 @@ function renderPreview(items) {
       }
     } else if (state.kind === 'meal') {
       const portion = item.portion ? ` · about ${item.portion.count} ${escapeHtml(item.portion.unit)}` : ''
-      left.innerHTML = `<div>${escapeHtml(item.name)}</div><div class="sub">${item.kcal} kcal · ${item.protein} g protein${portion}</div>`
+      const units = item.units ? ` · ${item.units} units` : ''
+      left.innerHTML = `<div>${escapeHtml(item.name)}</div><div class="sub">${item.kcal} kcal · ${item.protein} g protein${portion}${units}</div>`
     } else if (item.exercise) {
       const vol = item.exercise.volume ? ` · ${item.exercise.volume.toLocaleString()} kg volume` : ''
       left.innerHTML = `<div>${escapeHtml(item.name)}</div><div class="sub">~${item.minutes} min · ${item.kcal} kcal${vol}</div>`
@@ -986,8 +987,9 @@ function renderEntryDetail(entry, kind) {
         <span></span><span class="meta"></span>`
     } else if (kind === 'meal') {
       const portion = item.portion ? ` · ~${item.portion.count} ${item.portion.unit}` : ''
+      const units = item.units ? ` · ${item.units} units` : ''
       row.innerHTML = `
-        <span>${escapeHtml(item.name)}<span class="meta" style="display:block">${item.kcal} kcal · ${item.protein}g P${portion}</span></span>
+        <span>${escapeHtml(item.name)}<span class="meta" style="display:block">${item.kcal} kcal · ${item.protein}g P${portion}${units}</span></span>
         <input type="number" inputmode="numeric" min="0" value="${item.grams}" aria-label="Grams">
         <span class="meta">g</span>`
     } else if (item.exercise) {
@@ -1101,6 +1103,7 @@ function coachText(dayData, reviewData) {
   lines.push(`Energy: in ${Math.round(day.caloriesIn)} / target ${day.targets.calories} · out ${Math.round(day.caloriesOut)} · ${day.deficit >= 0 ? 'deficit' : 'surplus'} ${Math.abs(Math.round(day.net))}`)
   lines.push(`Macros: P ${Math.round(day.nutrition.protein)}/${day.targets.protein}g · C ${Math.round(day.nutrition.carbs)}g · F ${Math.round(day.nutrition.fat)}g · fibre ${Math.round(day.nutrition.fibre)}/${day.targets.fibre}g`)
   lines.push(`Water: ${litres(day.waterMl || 0)} of ${litres(day.targets.waterMl || 0)}`)
+  if (day.alcoholUnits) lines.push(`Alcohol: ${day.alcoholUnits} units (${Math.round(day.alcoholKcal)} kcal)`)
   lines.push('')
   lines.push('Meals:')
   for (const meal of entries.meals) {
@@ -1214,8 +1217,8 @@ function renderWeekStats(body, summary) {
       [`${summary.daysOnTarget}/${summary.loggedDays}`, 'days on target'],
       [`${summary.trainingDays}<small>/${summary.loggedDays}</small>`, 'training days'],
       [summary.totalVolumeKg ? summary.totalVolumeKg.toLocaleString() : '0', 'volume · kg'],
-      [summary.totalSets || 0, 'working sets'],
       [litres(summary.avgWaterMl), 'avg water'],
+      [`${summary.alcoholUnits || 0}<small>/14</small>`, 'alcohol units'],
     ])}
     ${volumeRows.length ? `<h2>Volume by pattern</h2><div class="group-bars">${volumeRows.map(([group, volume]) => `
       <div class="bar-row">
@@ -1270,7 +1273,7 @@ function renderMonthStats(body, summary) {
       [summary.trainingDays, 'training days'],
       [summary.totalVolumeKg ? summary.totalVolumeKg.toLocaleString() : '0', 'volume · kg'],
       [`${summary.bestStreak}<small> days</small>`, 'best streak'],
-      [summary.alcoholDays, 'alcohol days'],
+      [`${summary.alcoholUnits || 0}<small> units</small>`, `alcohol · ${summary.alcoholDays} days`],
     ])}
     ${weightLine ? `<h2>Weight</h2>${weightLine}` : '<p class="hint">Log weigh-ins to see the weight trend here.</p>'}`
 }

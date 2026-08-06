@@ -295,19 +295,30 @@ export function reviewDay(day, profile, recentDays = []) {
   // ------------------------------------------------------------------ alcohol
   if (day.alcoholKcal > 0) {
     const share = Math.round((day.alcoholKcal / day.caloriesIn) * 100)
+    // Units are the number the drinking guideline is written in, so lead with
+    // them when we have them - "2.4 units" lands differently to "210 kcal".
+    const units = day.alcoholUnits ? `${day.alcoholUnits} unit${day.alcoholUnits === 1 ? '' : 's'}, ` : ''
     if (day.alcoholKcal > 500) {
       findings.push(
         finding('bad', 'alcohol_heavy',
-          `${fmt(day.alcoholKcal)} kcal of that was alcohol - ${share}% of your intake, and ` +
+          `${units}${fmt(day.alcoholKcal)} kcal of that was alcohol - ${share}% of your intake, and ` +
           `not one gram of it is protein, fibre or anything your body needed. It also blunts ` +
-          `muscle protein synthesis and wrecks the sleep that your recovery depends on. ` +
-          `This was the single most expensive decision of your day.`)
+          `muscle protein synthesis for about a day and wrecks the sleep that your recovery ` +
+          `depends on. This was the single most expensive decision of your day.`)
       )
     } else {
       findings.push(
         finding('warn', 'alcohol',
-          `${fmt(day.alcoholKcal)} kcal from alcohol (${share}% of intake). Not fatal, but it ` +
+          `${units}${fmt(day.alcoholKcal)} kcal from alcohol (${share}% of intake). Not fatal, but it ` +
           `is the cheapest place to find calories back when you want them.`)
+      )
+    }
+    if (day.training.strengthMinutes > 0 && day.alcoholUnits >= 4) {
+      findings.push(
+        finding('warn', 'alcohol_after_lifting',
+          `You lifted today and then drank ${day.alcoholUnits} units. Alcohol blunts the repair ` +
+          `response for roughly 24 hours, so this is the session you got the least out of. ` +
+          `If the drinking is happening anyway, put it after the last session of the week.`)
       )
     }
   }
@@ -509,6 +520,30 @@ export function reviewWeek(week, profile, days = []) {
       finding('bad', 'week_alcohol',
         `Alcohol on ${week.alcoholDays} of ${week.loggedDays} logged days. This is the pattern ` +
         `that quietly cancels an otherwise decent week.`)
+    )
+  }
+
+  // The UK guideline is 14 units a week for everyone, spread over three or
+  // more days, with drink-free days in between. It is a health limit, not a
+  // fat-loss one - worth stating separately from the calorie arithmetic.
+  const units = week.alcoholUnits || 0
+  if (units > 14) {
+    findings.push(
+      finding('bad', 'week_units_over',
+        `${units} units this week, against the 14-unit weekly guideline. That is ` +
+        `${Math.round((units / 14 - 1) * 100)}% over, and roughly ${fmt(Math.round(units * 80))} kcal ` +
+        `you drank rather than ate.`)
+    )
+  } else if (units >= 10) {
+    findings.push(
+      finding('warn', 'week_units',
+        `${units} units this week. Under the 14-unit guideline, but not by much - and the ` +
+        `calories that come with the drinking are rarely in the glass.`)
+    )
+  } else if (units > 0) {
+    findings.push(
+      finding('good', 'week_units_ok',
+        `${units} units this week, comfortably inside the 14-unit guideline.`)
     )
   }
 

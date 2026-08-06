@@ -222,6 +222,7 @@ export function sumMeals(meals) {
   const totals = { ...EMPTY_TOTALS }
   let unrecognised = 0
   let alcoholKcal = 0
+  let alcoholUnits = 0
   const tags = new Map()
 
   for (const meal of meals) {
@@ -233,6 +234,7 @@ export function sumMeals(meals) {
       totals.fibre += item.fibre || 0
       totals.sugar += item.sugar || 0
       if (item.recognised === false) unrecognised += 1
+      alcoholUnits += item.units || 0
       for (const tag of item.tags || []) {
         tags.set(tag, (tags.get(tag) || 0) + (item.kcal || 0))
         if (tag === 'alcohol') alcoholKcal += item.kcal || 0
@@ -242,7 +244,13 @@ export function sumMeals(meals) {
 
   for (const key of Object.keys(totals)) totals[key] = Math.round(totals[key] * 10) / 10
   totals.kcal = Math.round(totals.kcal)
-  return { totals, unrecognised, alcoholKcal: Math.round(alcoholKcal), tags }
+  return {
+    totals,
+    unrecognised,
+    alcoholKcal: Math.round(alcoholKcal),
+    alcoholUnits: Math.round(alcoholUnits * 10) / 10,
+    tags,
+  }
 }
 
 /** Sum the energy and training-quality signals across logged workouts. */
@@ -337,6 +345,7 @@ export function buildDay({ profile, meals = [], workouts = [], waters = [], date
     nutrition: nutrition.totals,
     unrecognisedItems: nutrition.unrecognised,
     alcoholKcal: nutrition.alcoholKcal,
+    alcoholUnits: nutrition.alcoholUnits,
     tagKcal: Object.fromEntries(nutrition.tags),
     training,
     targets: { ...targets, waterMl: waterTarget },
@@ -378,6 +387,7 @@ export function buildWeek(days) {
     trainingDays: logged.filter((d) => d.training.minutes > 0).length,
     strengthDays: logged.filter((d) => d.training.strengthMinutes > 0).length,
     alcoholDays: logged.filter((d) => d.alcoholKcal > 0).length,
+    alcoholUnits: Math.round(sum((d) => d.alcoholUnits || 0) * 10) / 10,
     totalTrainingMinutes: sum((d) => d.training.minutes),
     equivalentModerateMinutes: sum((d) => d.training.equivalentModerateMinutes),
     totalDistanceKm: Math.round(sum((d) => d.training.distanceKm) * 10) / 10,
@@ -449,6 +459,7 @@ export function summarisePeriod(days, weighIns = []) {
     volumeByGroup,
     totalDistanceKm: Math.round(sum((d) => d.training.distanceKm) * 10) / 10,
     alcoholDays: logged.filter((d) => d.alcoholKcal > 0).length,
+    alcoholUnits: Math.round(sum((d) => d.alcoholUnits || 0) * 10) / 10,
     daysOnTarget: logged.filter((d) => d.caloriesIn > 0 && d.caloriesIn <= d.targets.calories * 1.05).length,
     bestStreak,
     projectedKgPerWeek: count ? Math.round(((avgNet * 7) / KCAL_PER_KG) * 100) / 100 : 0,

@@ -6,7 +6,7 @@
  * has to come out the other side as structured, weighed food items.
  */
 
-import { ALIAS_INDEX, FOODS_BY_ID } from './data/foods.js'
+import { ALIAS_INDEX, FOODS_BY_ID, unitsFor } from './data/foods.js'
 import { ACTIVITY_ALIAS_INDEX, ACTIVITIES_BY_ID, metForSpeed } from './data/activities.js'
 import { EXERCISE_ALIAS_INDEX } from './data/exercises.js'
 
@@ -32,6 +32,23 @@ const PORTION_UNITS = new Set([
   'burger', 'burgers', 'kebab', 'pot', 'pots', 'date', 'dates', 'single',
   'doubles', 'double', 'sandwich', 'sandwiches', 'ball', 'pitta', 'naan',
 ])
+
+/**
+ * Standard container volumes in ml, for drinks only.
+ *
+ * Without this every container word resolves to the food's own default
+ * serving, so "a can of Punk IPA" would be measured as a 568 ml pint - 70%
+ * more than the 330 ml actually drunk. A bottle is deliberately absent here
+ * because it is the one container whose size depends on the drink: 750 ml of
+ * wine, 330 ml of beer. That is resolved from the food's own tags below.
+ */
+const CONTAINER_ML = {
+  pint: 568, pints: 568,
+  halfpint: 284, half: 284,
+  can: 330, cans: 330, tin: 330, tins: 330,
+  schooner: 425,
+  bottle: null, bottles: null, // food-dependent
+}
 
 /** Units with a fixed weight regardless of which food they measure. */
 const FIXED_UNIT_GRAMS = {
@@ -222,11 +239,14 @@ export function parseFoodPhrase(phrase) {
 
   // A trailing bare number reads as a count: "white bread 2", "eggs 3".
   // Capped at 20 so dish names with numbers in them ("chicken 65") cannot
-  // silently become twenty portions of something.
+  // silently become twenty portions of something - and skipped entirely when
+  // the number is part of the drink's own name, or "guinness 0.0" would log
+  // as zero pints of Guinness.
   if (quantity === null && explicitGrams === null) {
     const trailing = working.match(/\s(\d+(?:\.\d+)?)\s*$/)
-    if (trailing && parseFloat(trailing[1]) <= 20) {
-      quantity = parseFloat(trailing[1])
+    const value = trailing ? parseFloat(trailing[1]) : null
+    if (trailing && value > 0 && value <= 20 && !namesTheNumber(working, trailing[1])) {
+      quantity = value
       working = working.replace(trailing[0], ' ')
     }
   }
@@ -274,6 +294,7 @@ export function parseFoodPhrase(phrase) {
       name: raw,
       grams: explicitGrams ?? 0,
       kcal: 0, protein: 0, carbs: 0, fat: 0, fibre: 0, sugar: 0,
+      tags: [],
       recognised: false,
       confidence: 0,
     }
@@ -286,7 +307,9 @@ export function parseFoodPhrase(phrase) {
     grams = explicitGrams
   } else {
     const count = quantity ?? 1
+    const containerMl = containerVolume(unit, food)
     if (unit && unit in FIXED_UNIT_GRAMS) grams = count * FIXED_UNIT_GRAMS[unit]
+    else if (containerMl) grams = count * containerMl
     else grams = count * food.unit.grams
   }
   grams = Math.max(0, grams * sizeFactor)
@@ -307,9 +330,42 @@ export function parseFoodPhrase(phrase) {
     fat: round(food.per100.fat * scale),
     fibre: round(food.per100.fibre * scale),
     sugar: round(food.per100.sugar * scale),
+    // UK alcohol units, so the week can be measured against the 14-unit
+    // guideline rather than only against calories.
+    units: unitsFor(food.id, grams),
+    // Carried here rather than bolted on by the API layer, so anything that
+    // parses a meal - including tests and the engine - can reason about
+    // alcohol and food quality without a second lookup.
+    tags: food.tags,
     recognised: true,
     confidence: round(score, 2),
   }
+}
+
+/**
+ * True when the trailing number belongs to the food's own name rather than
+ * being a count - "Guinness 0.0", "Punk AF 0.5". Checked against the matched
+ * food's aliases so it stays data-driven.
+ */
+function namesTheNumber(phrase, digits) {
+  const match = matchFood(phrase)
+  if (!match) return false
+  const terms = [match.food.name.toLowerCase(), ...match.food.aliases]
+  return terms.some((term) => term.includes(digits))
+}
+
+/**
+ * The real volume of a named container, for drinks. Returns null when the
+ * word is not a container, the food is not a drink, or the food's own
+ * serving is already the right answer.
+ */
+function containerVolume(unit, food) {
+  if (!unit || !food.tags.includes('drink')) return null
+  if (!(unit in CONTAINER_ML)) return null
+  const ml = CONTAINER_ML[unit]
+  if (ml) return ml
+  // "bottle": 750 ml of wine, 330 ml of anything else.
+  return food.tags.includes('wine') ? 750 : 330
 }
 
 /** @returns {{count:number, unit:string}|null} */
@@ -350,6 +406,7 @@ export function reweighFoodItem(item, grams) {
     ...item,
     grams: round(grams, 0),
     portion: describePortion(grams, food),
+    units: unitsFor(food.id, grams),
     kcal: round(food.per100.kcal * scale, 0),
     protein: round(food.per100.protein * scale),
     carbs: round(food.per100.carbs * scale),

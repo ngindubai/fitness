@@ -123,6 +123,15 @@ export class FileStore {
     return (data.pantry?.[userId] || []).slice().reverse()
   }
 
+  async listSharedPantry(userId) {
+    const data = await this.#read()
+    return Object.entries(data.pantry || {})
+      .filter(([owner]) => owner !== userId)
+      .flatMap(([, items]) => items)
+      .slice()
+      .reverse()
+  }
+
   async addPantryItem(userId, item) {
     return this.#mutate((data) => {
       if (!data.pantry) data.pantry = {}

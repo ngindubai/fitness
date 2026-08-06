@@ -101,6 +101,7 @@
     <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.6 4.6L19 7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-pantry" viewBox="0 0 24 24"><path d="M7 3.5h10M8.5 3.5v3h7v-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><rect x="5.5" y="6.5" width="13" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M5.5 12h13" stroke="currentColor" stroke-width="1.4"/><path d="M9.5 9.2h5M9.5 15.5h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
     <symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 12h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-body" viewBox="0 0 24 24"><circle cx="12" cy="4.5" r="2.4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 7.5v6M12 9l-4.5 2M12 9l4.5 2M12 13.5 9 20M12 13.5 15 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
   </defs>
 </svg>
 
@@ -140,6 +141,7 @@
       <button data-view="today"><svg class="ico"><use href="#i-today"/></svg>Today</button>
       <button data-view="plan"><svg class="ico"><use href="#i-plan"/></svg>Plan</button>
       <button data-view="coach"><svg class="ico"><use href="#i-coach"/></svg>Coach</button>
+      <button data-view="body"><svg class="ico"><use href="#i-body"/></svg>Body</button>
       <button data-view="stats"><svg class="ico"><use href="#i-stats"/></svg>Stats</button>
       <button data-view="meals"><svg class="ico"><use href="#i-meals"/></svg>Meals</button>
       <button data-view="pantry"><svg class="ico"><use href="#i-pantry"/></svg>Pantry</button>
@@ -233,6 +235,7 @@
         <div class="preview" id="preview"></div>
         <div class="actions">
           <button class="btn primary" id="save-entry">Log it</button>
+          <button class="btn ghost" id="browse-exercises">Exercise menu</button>
           <button class="btn ghost" id="clear-entry">Clear</button>
         </div>
         <p class="hint" id="logger-hint">Type it how you'd say it — "200g chicken", "ran 5k in 26 min",
@@ -276,6 +279,28 @@
         <h2>Last 7 days</h2>
         <div class="stat-grid" id="week-stats"></div>
         <div class="findings" id="week-findings"></div>
+      </div>
+    </section>
+
+    <!-- ========================================================== BODY -->
+    <section id="view-body" class="hidden">
+      <div class="card">
+        <div class="stats-head">
+          <div class="seg" id="body-period">
+            <button data-bodymode="live" aria-pressed="true">Live</button>
+            <button data-bodymode="week" aria-pressed="false">Week</button>
+            <button data-bodymode="month" aria-pressed="false">Month</button>
+            <button data-bodymode="year" aria-pressed="false">Year</button>
+            <button data-bodymode="custom" aria-pressed="false">Custom</button>
+          </div>
+        </div>
+        <div class="grid-2 hidden" id="body-custom">
+          <div class="field"><label for="body-from">From</label><input id="body-from" type="date"></div>
+          <div class="field"><label for="body-to">To</label><input id="body-to" type="date"></div>
+        </div>
+        <p class="hint" id="body-caption"></p>
+        <div id="body-map"></div>
+        <div id="body-detail"></div>
       </div>
     </section>
 
@@ -415,12 +440,48 @@
       <button data-view="today"><svg class="ico"><use href="#i-today"/></svg><span>Today</span></button>
       <button data-view="plan"><svg class="ico"><use href="#i-plan"/></svg><span>Plan</span></button>
       <button data-view="coach"><svg class="ico"><use href="#i-coach"/></svg><span>Coach</span></button>
+      <button data-view="body"><svg class="ico"><use href="#i-body"/></svg><span>Body</span></button>
       <button data-view="stats"><svg class="ico"><use href="#i-stats"/></svg><span>Stats</span></button>
       <button data-view="meals"><svg class="ico"><use href="#i-meals"/></svg><span>Meals</span></button>
       <button data-view="pantry"><svg class="ico"><use href="#i-pantry"/></svg><span>Pantry</span></button>
       <button data-view="you"><svg class="ico"><use href="#i-you"/></svg><span>You</span></button>
     </nav>
   </main>
+</div>
+
+<!-- Exercise picker sheet -->
+<div id="exercise-sheet" class="sheet hidden" role="dialog" aria-label="Exercise menu">
+  <div class="sheet-panel move-panel">
+    <div class="sheet-head">
+      <h2>Exercise menu</h2>
+      <button class="icon-btn" id="exercise-close" aria-label="Close"><svg class="ico"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="seg" id="exercise-groups"></div>
+    <div class="field"><input id="exercise-search" type="search" autocomplete="off"
+      placeholder="Search exercises…" aria-label="Search exercises"></div>
+    <div id="exercise-list"></div>
+    <div id="exercise-config" class="hidden">
+      <div class="picked-name" id="picked-name"></div>
+      <div class="grid-3" id="picked-strength">
+        <div class="field"><label for="pk-sets">Sets</label><input id="pk-sets" type="number" min="1" max="10" value="3" inputmode="numeric"></div>
+        <div class="field"><label for="pk-reps">Reps</label><input id="pk-reps" type="number" min="1" max="100" value="10" inputmode="numeric"></div>
+        <div class="field"><label for="pk-weight">Weight kg</label><input id="pk-weight" type="number" min="0" max="500" step="0.5" inputmode="decimal"></div>
+      </div>
+      <div class="hidden" id="picked-cardio">
+        <div class="field"><label for="pk-minutes">Minutes</label><input id="pk-minutes" type="number" min="1" max="300" value="20" inputmode="numeric"></div>
+        <div class="seg sub" id="pk-effort">
+          <button data-effort="easy" aria-pressed="false">Easy</button>
+          <button data-effort="" aria-pressed="true">Steady</button>
+          <button data-effort="hard" aria-pressed="false">Hard</button>
+          <button data-effort="all-out" aria-pressed="false">All out</button>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="picked-add">Add to log</button>
+        <button class="btn ghost" id="picked-back">Back</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Movement guide sheet -->

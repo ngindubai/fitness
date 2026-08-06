@@ -413,6 +413,13 @@ function countTrailing(days, predicate) {
  */
 export function reviewWeek(week, profile, days = []) {
   const findings = []
+  const MUSCLE_NAMES = {
+    chest: 'chest', front_delts: 'front delts', side_delts: 'side delts',
+    rear_delts: 'rear delts', traps: 'traps', lats: 'lats', mid_back: 'mid back',
+    lower_back: 'lower back', biceps: 'biceps', triceps: 'triceps',
+    forearms: 'forearms', abs: 'abs', obliques: 'obliques', glutes: 'glutes',
+    quads: 'quads', hamstrings: 'hamstrings', calves: 'calves',
+  }
   if (!week.loggedDays) {
     return {
       headline: 'Nothing logged this week.',
@@ -499,6 +506,47 @@ export function reviewWeek(week, profile, days = []) {
       finding('good', 'week_volume',
         `${totalVolume.toLocaleString('en-GB')} kg moved under the bar this week. Volume is the ` +
         `number to push up slowly - same lifts, a little more each week.`)
+    )
+  }
+
+  // ------------------------------------------------------- muscle balance
+  // The heat map data feeding back into the verdict: what got trained, what
+  // keeps getting skipped, and whether the mirror muscles are winning.
+  const muscleTotals = {}
+  for (const day of days) {
+    for (const [muscle, effort] of Object.entries(day.training?.muscles || {})) {
+      muscleTotals[muscle] = (muscleTotals[muscle] || 0) + effort
+    }
+  }
+  const trainedMuscles = Object.entries(muscleTotals).filter(([, e]) => e >= 1)
+  if (trainedMuscles.length) {
+    const skipped = Object.keys(MUSCLE_NAMES).filter((m) => (muscleTotals[m] || 0) < 1)
+    const bigSkips = skipped.filter((m) =>
+      ['quads', 'hamstrings', 'glutes', 'chest', 'lats', 'mid_back'].includes(m))
+    if (bigSkips.length >= 2) {
+      findings.push(
+        finding('warn', 'week_muscles_skipped',
+          `Trained ${trainedMuscles.length} muscle groups this week but ` +
+          `${bigSkips.map((m) => MUSCLE_NAMES[m]).join(', ')} got essentially nothing. ` +
+          `The muscles you skip are the ones that decide how you move at 60.`)
+      )
+    }
+
+    const front = (muscleTotals.chest || 0) + (muscleTotals.front_delts || 0) + (muscleTotals.biceps || 0)
+    const back = (muscleTotals.lats || 0) + (muscleTotals.mid_back || 0) + (muscleTotals.rear_delts || 0)
+    if (front > 4 && front > back * 2) {
+      findings.push(
+        finding('warn', 'week_mirror_muscles',
+          `Roughly ${Math.round(front)} units of pushing work against ${Math.round(back)} of pulling. ` +
+          `Mirror-muscle bias is how shoulders end up rounded and cranky - match every press with a row.`)
+      )
+    }
+
+    const [topMuscle, topEffort] = trainedMuscles.sort((a, b) => b[1] - a[1])[0]
+    findings.push(
+      finding('note', 'week_muscle_top',
+        `Hardest-worked muscle this week: ${MUSCLE_NAMES[topMuscle] || topMuscle} ` +
+        `(${Math.round(topEffort)} effort units). The Body tab shows the full map.`)
     )
   }
 

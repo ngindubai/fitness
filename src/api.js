@@ -13,6 +13,8 @@ import { FOODS, FOODS_BY_ID } from './data/foods.js'
 import { ACTIVITIES } from './data/activities.js'
 import { issueToken, verifyToken, checkPasscode, extractToken, sessionCookie, clearedCookie, hashPasscode, verifyPasscodeHash } from './auth.js'
 import { planForDate, itemsForBlock, planOverview } from './plan.js'
+import { MUSCLES, muscleEffortFor, recoveringMuscles, RECOVERY_HOURS } from './muscles.js'
+import { EXERCISES } from './data/exercises.js'
 import { PLANS, PLAN_LIST } from './data/plans.js'
 import { aiReview, aiMealIdeas, isAiConfigured } from './ai.js'
 
@@ -40,6 +42,12 @@ export function addDays(isoDate, days) {
   date.setUTCDate(date.getUTCDate() + days)
   return date.toISOString().slice(0, 10)
 }
+
+/** The gym cardio menu: machines only, in the order a gym floor has them. */
+const CARDIO_MACHINES = new Set([
+  'treadmill', 'elliptical', 'rowing_machine', 'stationary_bike', 'spin_class',
+  'assault_bike', 'stairs', 'ski_erg',
+])
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 const isValidDate = (value) => typeof value === 'string' && ISO_DATE.test(value)
@@ -190,11 +198,23 @@ export async function handleApi(request, ctx) {
     if (date && date < today) await store.deleteReview(userId, date).catch(() => {})
   }
 
-  // The user's scanned/custom products, loaded once per request on the
-  // routes that parse food text, so "my protein bar" resolves to THEIR bar.
+  // The user's scanned/custom products PLUS everyone else's scans, loaded
+  // once per request on the routes that parse food text. Sharing is the
+  // point of a household app: when one person scans a product, the next
+  // person's "protein granola" just works. Own items come first so they win
+  // ties, and names you already have are not duplicated by others' copies.
   let pantryCache = null
   const pantryFoods = async () => {
-    if (!pantryCache) pantryCache = await store.listPantry(userId).catch(() => [])
+    if (pantryCache) return pantryCache
+    const own = await store.listPantry(userId).catch(() => [])
+    const shared = (await store.listSharedPantry?.(userId)?.catch?.(() => []) || [])
+    const ownNames = new Set(own.map((item) => item.name.toLowerCase()))
+    pantryCache = [
+      ...own,
+      ...shared
+        .filter((item) => !ownNames.has(item.name.toLowerCase()))
+        .map((item) => ({ ...item, shared: true })),
+    ]
     return pantryCache
   }
 
@@ -413,6 +433,48 @@ export async function handleApi(request, ctx) {
   if (path === '/plan-overview' && method === 'GET') {
     if (!profile.planId || !PLANS[profile.planId]) return json({ plan: null })
     return json(planOverview(profile.planId, profile.planStart, today))
+  }
+
+  // ----------------------------------------------------------------- muscles
+  if (path === '/muscles' && method === 'GET') {
+    const mode = url.searchParams.get('mode') === 'live' ? 'live' : 'range'
+
+    if (mode === 'live') {
+      // Recovery reads the last two days of entries; timestamps decide.
+      const from = addDays(today, -2)
+      const entries = await store.listEntries(userId, from, today)
+      const workouts = entries.filter((e) => e.kind === 'workout')
+      return json({
+        mode: 'live',
+        recoveryHours: RECOVERY_HOURS,
+        recovering: recoveringMuscles(workouts),
+        catalogue: MUSCLES,
+      })
+    }
+
+    const to = isValidDate(url.searchParams.get('to')) ? url.searchParams.get('to') : today
+    const from = isValidDate(url.searchParams.get('from')) ? url.searchParams.get('from') : addDays(to, -6)
+    if (from > to) return error(400, 'from must not be after to.')
+    const entries = await store.listEntries(userId, from, to)
+    const workouts = entries.filter((e) => e.kind === 'workout')
+    return json({
+      mode: 'range',
+      from,
+      to,
+      effort: muscleEffortFor(workouts),
+      workoutCount: workouts.length,
+      catalogue: MUSCLES,
+    })
+  }
+
+  // The exercise menu: every lift with its muscles, plus the cardio machines.
+  if (path === '/exercises' && method === 'GET') {
+    return json({
+      exercises: EXERCISES.map((e) => ({ id: e.id, name: e.name, group: e.group, muscles: e.muscles })),
+      cardio: ACTIVITIES
+        .filter((a) => CARDIO_MACHINES.has(a.id))
+        .map((a) => ({ id: a.id, name: a.name, met: a.met })),
+    })
   }
 
   // ------------------------------------------------------------------ pantry

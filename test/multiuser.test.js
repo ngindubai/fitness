@@ -208,7 +208,7 @@ test('new exercises land on the right movement', async () => {
   assert.equal(parseWorkoutPhrase('hip abduction 3x15').exercise.id, 'hip_abduction')
   assert.equal(parseWorkoutPhrase('burpees 5x20').exercise.id, 'burpee')
   assert.equal(parseWorkoutPhrase('chest press machine 3x10 50kg').exercise.id, 'chest_press_machine')
-  assert.equal(parseWorkoutPhrase('arnold press 3x12 20kg').exercise.id, 'ohp')
+  assert.equal(parseWorkoutPhrase('arnold press 3x12 20kg').exercise.id, 'arnold_press')
   assert.equal(parseWorkoutPhrase('sumo deadlift 3x5 160kg').exercise.id, 'deadlift')
   assert.equal(parseWorkoutPhrase('20 min assault bike').activityId, 'assault_bike')
   assert.equal(parseWorkoutPhrase('pickleball 45 min').activityId, 'pickleball')

@@ -10,6 +10,7 @@
 
 import { activityKcal } from './parse.js'
 import { PLANS } from './data/plans.js'
+import { itemMuscleEffort } from './muscles.js'
 
 /**
  * Baseline activity multipliers applied to BMR. These deliberately describe
@@ -266,6 +267,7 @@ export function sumWorkouts(workouts, weightKg) {
   let volumeKg = 0
   let sets = 0
   const volumeByGroup = {}
+  const muscles = {}
 
   for (const workout of workouts) {
     for (const item of workout.items || []) {
@@ -288,8 +290,13 @@ export function sumWorkouts(workouts, weightKg) {
           volumeByGroup[group] = (volumeByGroup[group] || 0) + item.exercise.volume
         }
       }
+
+      for (const [muscle, effort] of Object.entries(itemMuscleEffort(item))) {
+        muscles[muscle] = (muscles[muscle] || 0) + effort
+      }
     }
   }
+  for (const key of Object.keys(muscles)) muscles[key] = Math.round(muscles[key] * 10) / 10
 
   return {
     kcal: Math.round(kcal),
@@ -303,6 +310,7 @@ export function sumWorkouts(workouts, weightKg) {
     volumeKg: Math.round(volumeKg),
     sets,
     volumeByGroup,
+    muscles,
     // WHO counts one vigorous minute as two moderate minutes.
     equivalentModerateMinutes: Math.round(moderateMinutes + vigorousMinutes * 2),
   }

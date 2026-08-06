@@ -914,3 +914,36 @@ label.btn { display: inline-flex; align-items: center; cursor: pointer; }
 #scan-form { margin-top: 14px; }
 #scan-notes .finding { margin-top: 8px; }
 #pantry-list .ing-row .ghost { margin-left: 6px; }
+
+/* -------------------------------------------------------------- body map */
+
+.body-map { display: block; width: 100%; max-width: 460px; margin: 6px auto 10px; }
+.body-map .body-frame > * { fill: var(--surface-2); stroke: var(--border); stroke-width: 1; }
+.body-map .body-muscle { stroke: var(--border-strong); stroke-width: 0.7; cursor: pointer; transition: fill-opacity 0.25s; }
+.body-map .body-label {
+  fill: var(--faint);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+#body-detail { margin-top: 6px; }
+#body-period { flex-wrap: wrap; }
+
+/* -------------------------------------------------------- exercise picker */
+
+#exercise-groups { flex-wrap: wrap; margin-bottom: 10px; }
+#exercise-list { max-height: 44dvh; overflow-y: auto; }
+.exercise-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 11px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.exercise-item:hover { color: var(--accent); }
+.exercise-item .meta { color: var(--faint); font-size: 0.72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+.picked-name { font-family: var(--serif); font-size: 1.15rem; margin: 8px 0 10px; }

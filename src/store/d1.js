@@ -171,6 +171,20 @@ export class D1Store {
     return (results || []).map((row) => JSON.parse(row.data))
   }
 
+  /**
+   * Everyone else's scans. One person photographs a label once and the whole
+   * household can log that product — reads are free on D1, so this costs
+   * nothing but the query.
+   */
+  async listSharedPantry(userId) {
+    await this.#ensurePantry()
+    const { results } = await this.db
+      .prepare('SELECT data FROM pantry WHERE user_id != ? ORDER BY created_at DESC LIMIT 500')
+      .bind(userId)
+      .all()
+    return (results || []).map((row) => JSON.parse(row.data))
+  }
+
   async addPantryItem(userId, item) {
     await this.#ensurePantry()
     await this.db

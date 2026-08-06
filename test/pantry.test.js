@@ -177,21 +177,22 @@ test('scan-to-log, end to end: save, recognise, count, delete', async () => {
   assert.notEqual(gone.items[0]?.foodId, item.id)
 })
 
-test('pantries are private to each user', async () => {
+test('scans are shared with the household but stay owned by the scanner', async () => {
   const ctx = makeCtx()
   const owner = (await (await call(ctx, '/login', { method: 'POST', body: { passcode: 'boss-code' } })).json()).token
   const katy = (await (await call(ctx, '/signup', { method: 'POST', body: { passcode: 'katy-cooks', name: 'Katy' } })).json()).token
 
   await call(ctx, '/pantry', {
     method: 'POST', token: owner,
-    body: { name: 'Secret Snack', per100: { kcal: 500, protein: 10, carbs: 50, fat: 25, fibre: 0, sugar: 20 } },
+    body: { name: 'Shared Snack', per100: { kcal: 500, protein: 10, carbs: 50, fat: 25, fibre: 0, sugar: 20 } },
   })
+  // Katy can see it and log it - that is the point of a household pantry -
+  // but it arrives marked as shared and only its owner can delete it.
   const hers = await (await call(ctx, '/pantry', { token: katy })).json()
-  assert.equal(hers.items.length, 0)
-  const parsedForHer = await (await call(ctx, '/parse', {
-    method: 'POST', token: katy, body: { kind: 'meal', text: 'secret snack' },
-  })).json()
-  assert.notEqual(parsedForHer.items[0]?.name, 'Secret Snack')
+  assert.equal(hers.items.length, 1)
+  assert.ok(hers.items[0].shared)
+  assert.equal((await call(ctx, `/pantry/${hers.items[0].id}`, { method: 'DELETE', token: katy })).status, 404)
+  assert.equal((await call(ctx, `/pantry/${hers.items[0].id}`, { method: 'DELETE', token: owner })).status, 200)
 })
 
 test('nonsense labels are rejected at the door', async () => {

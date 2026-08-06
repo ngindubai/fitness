@@ -178,7 +178,7 @@ $('logout').addEventListener('click', async () => {
 
 // -------------------------------------------------------------- navigation
 
-const VIEWS = ['today', 'plan', 'coach', 'stats', 'meals', 'pantry', 'you']
+const VIEWS = ['today', 'plan', 'coach', 'body', 'stats', 'meals', 'pantry', 'you']
 
 document.querySelectorAll('nav.tabs button, .side-nav button').forEach((button) => {
   button.addEventListener('click', () => showView(button.dataset.view))
@@ -193,6 +193,7 @@ function showView(view) {
   if (view === 'plan') loadPlanOverview()
   if (view === 'coach') loadReview()
   if (view === 'stats') loadStats()
+  if (view === 'body') loadBody()
   if (view === 'meals') loadRecommendations()
   if (view === 'pantry') { loadPantry(); loadIngredients() }
 }
@@ -1346,6 +1347,228 @@ async function loadRecommendations() {
     $('recommendations').innerHTML = `<p class="empty">${escapeHtml(error.message)}</p>`
   }
 }
+
+// -------------------------------------------------------------------- body
+
+state.bodyMode = 'live'
+
+document.querySelectorAll('#body-period button').forEach((button) => {
+  button.addEventListener('click', () => {
+    state.bodyMode = button.dataset.bodymode
+    document.querySelectorAll('#body-period button').forEach((b) =>
+      b.setAttribute('aria-pressed', String(b === button)))
+    $('body-custom').classList.toggle('hidden', state.bodyMode !== 'custom')
+    if (state.bodyMode !== 'custom') loadBody()
+  })
+})
+
+for (const id of ['body-from', 'body-to']) {
+  $(id).addEventListener('change', () => {
+    if ($('body-from').value && $('body-to').value) loadBody()
+  })
+}
+
+function bodyRange() {
+  const today = state.today
+  if (state.bodyMode === 'week') return { from: shiftDate(today, -6), to: today }
+  if (state.bodyMode === 'month') return { from: shiftDate(today, -29), to: today }
+  if (state.bodyMode === 'year') return { from: shiftDate(today, -364), to: today }
+  return { from: $('body-from').value, to: $('body-to').value }
+}
+
+async function loadBody() {
+  const detail = $('body-detail')
+  detail.innerHTML = ''
+  try {
+    const { renderBodyMap } = await import('/body.js')
+
+    if (state.bodyMode === 'live') {
+      const data = await api('/muscles?mode=live')
+      const names = Object.fromEntries(data.catalogue.map((m) => [m.id, m.name]))
+      const recovering = data.recovering
+      const count = Object.keys(recovering).length
+      $('body-caption').textContent = count
+        ? `${count} muscle${count === 1 ? ' is' : 's are'} inside the 24-hour recovery window. Red means recently worked — train something pale.`
+        : 'Everything is recovered. No excuses left.'
+
+      renderBodyMap($('body-map'), (muscle) => {
+        const rec = recovering[muscle]
+        if (!rec) return { fill: 'var(--good)', opacity: 0.18, title: `${names[muscle]} — recovered` }
+        const freshness = rec.hoursLeft / data.recoveryHours // 1 = just trained
+        return {
+          fill: 'var(--bad)',
+          opacity: 0.25 + 0.6 * freshness,
+          title: `${names[muscle]} — ${rec.hoursLeft} h of recovery left`,
+        }
+      })
+
+      const rows = Object.entries(recovering).sort((a, b) => b[1].hoursLeft - a[1].hoursLeft)
+      detail.innerHTML = rows.length
+        ? rows.map(([muscle, rec]) => `
+            <div class="bar-row">
+              <span class="label">${escapeHtml(names[muscle])}</span>
+              <span class="bar-track"><span class="bar-fill bad" style="width:${Math.round((rec.hoursLeft / data.recoveryHours) * 100)}%"></span></span>
+              <span class="value">${rec.hoursLeft} h left</span>
+            </div>`).join('')
+        : ''
+      return
+    }
+
+    const { from, to } = bodyRange()
+    if (!from || !to) {
+      $('body-caption').textContent = 'Pick both dates.'
+      return
+    }
+    const data = await api(`/muscles?from=${from}&to=${to}`)
+    const names = Object.fromEntries(data.catalogue.map((m) => [m.id, m.name]))
+    const efforts = data.effort
+    const max = Math.max(1, ...Object.values(efforts))
+    const worked = Object.keys(efforts).length
+
+    $('body-caption').textContent = data.workoutCount
+      ? `${data.workoutCount} workout${data.workoutCount === 1 ? '' : 's'} between ${fmtDate(from, { day: 'numeric', month: 'short' })} and ${fmtDate(to, { day: 'numeric', month: 'short' })}. Darker means more work; grey means skipped.`
+      : 'No training logged in this range.'
+
+    renderBodyMap($('body-map'), (muscle) => {
+      const effort = efforts[muscle] || 0
+      if (!effort) return { fill: 'var(--faint)', opacity: 0.12, title: `${names[muscle]} — nothing` }
+      return {
+        fill: 'var(--accent)',
+        opacity: 0.2 + 0.7 * (effort / max),
+        title: `${names[muscle]} — ${effort} effort units`,
+      }
+    })
+
+    const rows = Object.entries(efforts).sort((a, b) => b[1] - a[1])
+    detail.innerHTML = rows.length
+      ? `<h2>Effort by muscle</h2>` + rows.map(([muscle, effort]) => `
+          <div class="bar-row">
+            <span class="label">${escapeHtml(names[muscle])}</span>
+            <span class="bar-track"><span class="bar-fill" style="width:${Math.round((effort / max) * 100)}%"></span></span>
+            <span class="value">${effort}</span>
+          </div>`).join('') +
+        (worked < 17 ? `<p class="hint">Untrained in this range: ${data.catalogue.filter((m) => !efforts[m.id]).map((m) => m.name).join(', ')}.</p>` : '')
+      : ''
+  } catch (error) {
+    $('body-caption').textContent = error.message
+  }
+}
+
+// -------------------------------------------------------- exercise picker
+
+let exerciseMenu = null // {exercises, cardio} from the API, cached
+let pickedExercise = null
+
+$('browse-exercises').addEventListener('click', async () => {
+  $('exercise-sheet').classList.remove('hidden')
+  $('exercise-config').classList.add('hidden')
+  $('exercise-list').classList.remove('hidden')
+  $('exercise-search').value = ''
+  if (!exerciseMenu) {
+    exerciseMenu = await api('/exercises').catch(() => null)
+    if (!exerciseMenu) return
+    const groups = ['all', 'legs', 'push', 'pull', 'core', 'full', 'cardio']
+    $('exercise-groups').innerHTML = groups.map((g) =>
+      `<button data-exgroup="${g}" aria-pressed="${g === 'all'}">${g[0].toUpperCase()}${g.slice(1)}</button>`).join('')
+    $('exercise-groups').addEventListener('click', (event) => {
+      const button = event.target.closest('button')
+      if (!button) return
+      document.querySelectorAll('#exercise-groups button').forEach((b) =>
+        b.setAttribute('aria-pressed', String(b === button)))
+      renderExerciseList()
+    })
+    $('exercise-search').addEventListener('input', renderExerciseList)
+  }
+  renderExerciseList()
+})
+
+$('exercise-close').addEventListener('click', () => $('exercise-sheet').classList.add('hidden'))
+$('exercise-sheet').addEventListener('click', (event) => {
+  if (event.target === $('exercise-sheet')) $('exercise-sheet').classList.add('hidden')
+})
+
+function renderExerciseList() {
+  if (!exerciseMenu) return
+  const group = document.querySelector('#exercise-groups button[aria-pressed="true"]')?.dataset.exgroup || 'all'
+  const query = $('exercise-search').value.trim().toLowerCase()
+  const list = $('exercise-list')
+  list.innerHTML = ''
+
+  const rows = group === 'cardio'
+    ? exerciseMenu.cardio.map((c) => ({ ...c, kind: 'cardio' }))
+    : exerciseMenu.exercises
+        .filter((e) => group === 'all' || e.group === group)
+        .map((e) => ({ ...e, kind: 'strength' }))
+        .concat(group === 'all' ? exerciseMenu.cardio.map((c) => ({ ...c, kind: 'cardio' })) : [])
+
+  const filtered = rows.filter((r) => !query || r.name.toLowerCase().includes(query))
+  for (const row of filtered) {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'exercise-item'
+    const sub = row.kind === 'cardio'
+      ? 'cardio machine'
+      : Object.keys(row.muscles || {}).slice(0, 3).map((m) => m.replace('_', ' ')).join(', ')
+    button.innerHTML = `<span>${escapeHtml(row.name)}</span><span class="meta">${escapeHtml(sub)}</span>`
+    button.addEventListener('click', () => pickExercise(row))
+    list.appendChild(button)
+  }
+  if (!filtered.length) list.innerHTML = '<p class="empty">Nothing matches.</p>'
+}
+
+function pickExercise(row) {
+  pickedExercise = row
+  $('exercise-list').classList.add('hidden')
+  $('exercise-config').classList.remove('hidden')
+  $('picked-name').textContent = row.name
+  $('picked-strength').classList.toggle('hidden', row.kind === 'cardio')
+  $('picked-cardio').classList.toggle('hidden', row.kind !== 'cardio')
+}
+
+$('picked-back').addEventListener('click', () => {
+  $('exercise-config').classList.add('hidden')
+  $('exercise-list').classList.remove('hidden')
+})
+
+$('pk-effort').addEventListener('click', (event) => {
+  const button = event.target.closest('button')
+  if (!button) return
+  document.querySelectorAll('#pk-effort button').forEach((b) =>
+    b.setAttribute('aria-pressed', String(b === button)))
+})
+
+/**
+ * The picker writes plain text into the logger — the same words you could
+ * have typed — so one parsing pipeline handles menu picks and free text
+ * alike, and the preview shows exactly what will be stored.
+ */
+$('picked-add').addEventListener('click', () => {
+  if (!pickedExercise) return
+  let phrase
+  if (pickedExercise.kind === 'cardio') {
+    const minutes = Math.max(1, Number($('pk-minutes').value) || 20)
+    const effort = document.querySelector('#pk-effort button[aria-pressed="true"]')?.dataset.effort || ''
+    phrase = `${pickedExercise.name.replace(/\s*\(.*?\)\s*/g, ' ').trim()} ${minutes} min${effort ? ` ${effort}` : ''}`
+  } else {
+    const sets = Math.max(1, Number($('pk-sets').value) || 3)
+    const reps = Math.max(1, Number($('pk-reps').value) || 10)
+    const weight = Number($('pk-weight').value)
+    phrase = `${pickedExercise.name.replace(/\s*\(.*?\)\s*/g, ' ').trim()} ${sets}x${reps}${weight ? ` ${weight}kg` : ''}`
+  }
+
+  if (state.kind !== 'workout') {
+    state.kind = 'workout'
+    document.querySelectorAll('#kind-seg button').forEach((b) =>
+      b.setAttribute('aria-pressed', String(b.dataset.kind === 'workout')))
+    $('slot-seg').classList.add('hidden')
+  }
+  const box = $('entry-text')
+  const existing = box.value.trim()
+  box.value = existing ? `${existing.replace(/,\s*$/, '')}, ${phrase}` : phrase
+  $('exercise-sheet').classList.add('hidden')
+  toast(`${pickedExercise.name} added — Log it when the set list is complete.`)
+  previewParse()
+})
 
 // ------------------------------------------------------------------ pantry
 

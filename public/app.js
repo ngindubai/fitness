@@ -694,7 +694,18 @@ $('analyse-day').addEventListener('click', async () => {
   try {
     const data = await api(`/food-audit?date=${state.date}`)
     $('audit-headline').textContent = data.headline
-    $('audit-findings').innerHTML = data.findings.map((f) => {
+    const fatRows = data.findings.filter((f) => f.kind === 'fat')
+    const fatBlock = fatRows.length
+      ? `<h3 class="audit-section">High in fat${data.fatTotal ? ` · ${data.fatTotal} g of fat today` : ''}</h3>` +
+        fatRows.map((f) => `
+          <div class="finding audit-fat">
+            <span class="audit-ico">◆</span>
+            <div><b>${escapeHtml(f.item)}</b>
+              <div class="audit-why">${escapeHtml(f.why)}</div></div>
+            <span class="audit-save fat">${f.fatG} g</span>
+          </div>`).join('')
+      : ''
+    const renderFinding = (f) => {
       if (f.kind === 'swap') {
         return `<div class="finding audit-${f.kind}">
           <span class="audit-ico">${AUDIT_ICONS[f.kind]}</span>
@@ -720,7 +731,12 @@ $('analyse-day').addEventListener('click', async () => {
         </div>`
       }
       return `<div class="finding note audit-note">${escapeHtml(f.why)}</div>`
-    }).join('') || '<p class="empty">Log some food first — then there is something to analyse.</p>'
+    }
+    // Order: what to change, then the fat ledger, then praise and patterns.
+    const actionable = data.findings.filter((f) => f.kind === 'swap' || f.kind === 'cut').map(renderFinding).join('')
+    const rest = data.findings.filter((f) => f.kind === 'keep' || f.kind === 'note').map(renderFinding).join('')
+    $('audit-findings').innerHTML = (actionable + fatBlock + rest)
+      || '<p class="empty">Log some food first — then there is something to analyse.</p>'
     if (data.potential) {
       $('audit-potential').textContent =
         `Take the lot and today lands at ${data.potential.wouldBe.toLocaleString()} kcal ` +

@@ -78,6 +78,29 @@ test('the best protein deal on the plate gets kept, not cut', () => {
   assert.ok(donut, 'the doughnut does not escape')
 })
 
+test('high-fat items are named with their exact fat grams', () => {
+  const result = audit('250g regular mince, 200g chicken breast')
+  const fat = result.findings.filter((f) => f.kind === 'fat')
+  assert.equal(fat.length, 1, 'only the mince is fat-heavy')
+  assert.match(fat[0].item, /20% fat/)
+  assert.equal(fat[0].fatG, 50) // 20 g/100g × 250 g
+  assert.match(fat[0].why, /50 g of fat/)
+  assert.match(fat[0].why, /% of its/)
+  assert.ok(result.fatTotal >= 50, 'the day fat total rides along')
+})
+
+test('fat-dense small portions are caught by share, not just grams', () => {
+  // 40 g of butter: only ~33 g fat? — well over the 55% share rule either way.
+  const result = audit('40g butter')
+  const fat = result.findings.find((f) => f.kind === 'fat')
+  assert.ok(fat, 'butter portion flagged by fat share')
+})
+
+test('lean days produce no fat findings', () => {
+  const result = audit('200g chicken breast, 200g broccoli')
+  assert.ok(!result.findings.some((f) => f.kind === 'fat'))
+})
+
 test('day notes call out protein and fibre shortfalls', () => {
   const result = audit('doughnut, crisps')
   const notes = result.findings.filter((f) => f.kind === 'note')

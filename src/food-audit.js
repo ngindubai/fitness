@@ -248,6 +248,29 @@ export function auditDay(mealEntries, day) {
     }
   }
 
+  // HIGH FAT: name every item that is genuinely fat-heavy and say exactly
+  // how much fat it carried at the logged portion — the number, not a vibe.
+  // "High" = 17 g+ of fat in the portion, or fat supplying over 55% of the
+  // item's calories with at least 10 g behind it.
+  const fatty = sorted
+    .filter((i) => {
+      const fat = i.fat || 0
+      const share = i.kcal > 0 ? (fat * 9) / i.kcal : 0
+      return fat >= 17 || (share >= 0.55 && fat >= 10)
+    })
+    .sort((a, b) => (b.fat || 0) - (a.fat || 0))
+    .slice(0, 6)
+  for (const item of fatty) {
+    const share = Math.round(((item.fat * 9) / item.kcal) * 100)
+    findings.push({
+      kind: 'fat',
+      item: item.name,
+      itemKcal: round(item.kcal || 0),
+      fatG: Math.round((item.fat || 0) * 10) / 10,
+      why: `${Math.round(item.fat)} g of fat in this portion — ${share}% of its ${round(item.kcal)} kcal. Shrink it, swap it, or make it the day's one indulgence.`,
+    })
+  }
+
   // KEEP: the best protein-per-calorie deal actually on the plate.
   const keeper = sorted
     .filter((i) => (i.protein || 0) >= 15 && i.kcal > 0)
@@ -302,5 +325,5 @@ export function auditDay(mealEntries, day) {
     ? `${round(day.caloriesIn).toLocaleString()} kcal in — ${actionable} change${actionable === 1 ? '' : 's'} would save ~${totalSave.toLocaleString()} kcal.`
     : `${round(day.caloriesIn).toLocaleString()} kcal in — nothing worth flagging. A clean day.`
 
-  return { findings, potential, headline }
+  return { findings, potential, headline, fatTotal: round(n.fat || 0) }
 }

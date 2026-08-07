@@ -656,6 +656,15 @@ nav.tabs button[aria-current='true'] { color: var(--accent); font-weight: 600; }
   font-size: 0.9rem;
 }
 .finding.audit-cut .audit-save { color: var(--bad); }
+.audit-section {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 14px 0 6px;
+}
+.finding.audit-fat { display: flex; gap: 10px; align-items: flex-start; }
+.audit-save.fat { color: var(--bad); }
 
 /* Plan screen: live session card */
 .session-row {

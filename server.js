@@ -46,6 +46,13 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
 
   try {
+    // Mirrors the Worker so local and live answer the same question.
+    if (url.pathname === '/api/version') {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ version: 'dev', tag: null }))
+      return
+    }
+
     if (url.pathname.startsWith('/api/')) {
       const request = await toWebRequest(req, url)
       const response = await handleApi(request, {

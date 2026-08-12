@@ -200,7 +200,7 @@ function showView(view) {
   if (view === 'body') loadBody()
   if (view === 'meals') loadRecommendations()
   if (view === 'pantry') { loadPantry(); loadIngredients() }
-  if (view === 'you') renderBmi()
+  if (view === 'you') { renderBmi(); loadBuildStamp() }
 }
 
 // ------------------------------------------------------------ date + strips
@@ -2272,7 +2272,11 @@ async function loadProfile() {
   state.bmi = bmi
   state.bmiBands = bmiBands
   state.today = today
-  if (!state.date) { state.date = today; state.statsDate = today }
+  // Snap back if the selected day is now in the future: the timezone sync on
+  // first boot can move "today" backwards (Dubai is already tomorrow when
+  // the browser reports UTC), and a stale date silently files entries on a
+  // day the rest of the app refuses to show.
+  if (!state.date || state.date > today) { state.date = today; state.statsDate = today }
 
   $('p-name').value = profile.name || ''
   $('p-sex').value = profile.sex
@@ -2333,6 +2337,48 @@ $('profile-form').addEventListener('submit', async (event) => {
     toast('Saved.')
     await loadDay()
   } catch (error) { toast(error.message, true) }
+})
+
+// ------------------------------------------------------------ build stamp
+
+/**
+ * Which build this phone is actually running. Deploys have been landing on
+ * the server while a cached copy kept running on the device, so the version
+ * is now something you can read rather than something you have to trust —
+ * and there is a button that guarantees a clean copy.
+ */
+const BUILD_FEATURES = ['sugar tracker', 'walking conditions', 'day audit', 'BMI chart']
+
+async function loadBuildStamp() {
+  const el = $('build-stamp')
+  if (!el) return
+  try {
+    const { version } = await api('/version')
+    const short = version === 'dev' ? 'local dev' : version.slice(0, 8)
+    const hasSugar = !!document.querySelector('#bars .bar-row')
+    el.textContent = `Build ${short}. Includes: ${BUILD_FEATURES.join(', ')}.`
+      + (hasSugar ? '' : ' If a feature is missing, hit the button below.')
+  } catch {
+    el.textContent = 'Could not read the build id — you may be offline.'
+  }
+}
+
+// Unregister every service worker, empty every cache, then reload past the
+// browser's own copy. The blunt instrument, on purpose.
+$('force-refresh').addEventListener('click', async () => {
+  $('force-refresh').disabled = true
+  $('build-stamp').textContent = 'Clearing caches…'
+  try {
+    if (navigator.serviceWorker?.getRegistrations) {
+      const regs = await navigator.serviceWorker.getRegistrations()
+      await Promise.all(regs.map((r) => r.unregister()))
+    }
+    if (window.caches?.keys) {
+      const keys = await caches.keys()
+      await Promise.all(keys.map((k) => caches.delete(k)))
+    }
+  } catch { /* clearing is best-effort; the reload below is the real fix */ }
+  location.replace(`/?fresh=${Date.now()}`)
 })
 
 // -------------------------------------------------------------- onboarding

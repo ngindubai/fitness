@@ -8,12 +8,37 @@
 import { handleApi } from './api.js'
 import { D1Store } from './store/d1.js'
 
+/**
+ * A deployed build is only useful if it reaches the phone. Cloudflare serves
+ * assets with `max-age=0, must-revalidate`, which is correct but still lets a
+ * mobile browser hang on to an old module graph after an update. So the HTML
+ * shell is never stored, and scripts and styles must be revalidated before
+ * use — a 304 when nothing changed, the new file the moment it does.
+ */
+function freshen(response, pathname) {
+  const headers = new Headers(response.headers)
+  if (pathname === '/' || pathname.endsWith('.html')) {
+    headers.set('cache-control', 'no-store, must-revalidate')
+  } else if (/\.(?:js|css|webmanifest)$/.test(pathname)) {
+    headers.set('cache-control', 'no-cache, must-revalidate')
+  } else {
+    return response
+  }
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
 
+    // Which build is live, readable without signing in — the answer to
+    // "did the update land?".
+    if (url.pathname === '/api/version') {
+      return json({ version: env.CF_VERSION_METADATA?.id || 'dev', tag: env.CF_VERSION_METADATA?.tag || null }, 200)
+    }
+
     if (!url.pathname.startsWith('/api/')) {
-      return env.ASSETS.fetch(request)
+      return freshen(await env.ASSETS.fetch(request), url.pathname)
     }
 
     if (!env.DB) {

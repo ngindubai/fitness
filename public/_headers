@@ -1,0 +1,52 @@
+# Cache policy for the static assets.
+#
+# Cloudflare serves files in this directory directly from the edge without
+# invoking the Worker, so headers cannot be set in code — this file is the
+# supported way to do it.
+#
+# The problem being solved: a deploy reaches the server, but the phone keeps
+# running the copy it already has. The default (max-age=0, must-revalidate)
+# should prevent that, and mostly does, but a mobile browser holding an old
+# ES-module graph is exactly the failure that has bitten this app. So:
+#
+#   no-store  on the HTML shell — never kept, always fetched fresh.
+#   no-cache  on our own scripts and styles — kept, but revalidated before
+#             use, so an unchanged file costs a 304 and a changed one is
+#             picked up immediately.
+#
+# /vendor/* is deliberately left alone: the OCR engine is several megabytes,
+# it changes roughly never, and revalidating it on every load would make the
+# app slower for no benefit.
+
+/
+  Cache-Control: no-store, must-revalidate
+
+/index.html
+  Cache-Control: no-store, must-revalidate
+
+/app.js
+  Cache-Control: no-cache, must-revalidate
+
+/styles.css
+  Cache-Control: no-cache, must-revalidate
+
+/movements.js
+  Cache-Control: no-cache, must-revalidate
+
+/anim.js
+  Cache-Control: no-cache, must-revalidate
+
+/demos.js
+  Cache-Control: no-cache, must-revalidate
+
+/body.js
+  Cache-Control: no-cache, must-revalidate
+
+/label-parse.js
+  Cache-Control: no-cache, must-revalidate
+
+/sw.js
+  Cache-Control: no-cache, must-revalidate
+
+/manifest.webmanifest
+  Cache-Control: no-cache, must-revalidate

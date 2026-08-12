@@ -306,7 +306,7 @@ export function parseFoodPhrase(phrase, extras) {
       foodId: null,
       name: raw,
       grams: explicitGrams ?? 0,
-      kcal: 0, protein: 0, carbs: 0, fat: 0, fibre: 0, sugar: 0,
+      kcal: 0, protein: 0, carbs: 0, fat: 0, fibre: 0, sugar: 0, freeSugar: 0,
       tags: [],
       recognised: false,
       confidence: 0,
@@ -343,6 +343,9 @@ export function parseFoodPhrase(phrase, extras) {
     fat: round(food.per100.fat * scale),
     fibre: round(food.per100.fibre * scale),
     sugar: round(food.per100.sugar * scale),
+    // Only the added/juice share counts against the NHS free-sugars guide;
+    // the fruit and milk sugars in `sugar` are not what the advice is about.
+    freeSugar: round((food.per100.freeSugar ?? food.per100.sugar) * scale),
     // UK alcohol units, so the week can be measured against the 14-unit
     // guideline rather than only against calories.
     units: unitsFor(food.id, grams),
@@ -414,7 +417,7 @@ export function reweighFoodItem(item, grams) {
     return { ...item, grams: round(grams, 0), kcal: round(item.kcal * factor, 0),
       protein: round(item.protein * factor), carbs: round(item.carbs * factor),
       fat: round(item.fat * factor), fibre: round(item.fibre * factor),
-      sugar: round(item.sugar * factor) }
+      sugar: round(item.sugar * factor), freeSugar: round((item.freeSugar || 0) * factor) }
   }
   const scale = grams / 100
   return {
@@ -428,6 +431,7 @@ export function reweighFoodItem(item, grams) {
     fat: round(food.per100.fat * scale),
     fibre: round(food.per100.fibre * scale),
     sugar: round(food.per100.sugar * scale),
+    freeSugar: round((food.per100.freeSugar ?? food.per100.sugar) * scale),
   }
 }
 
@@ -436,6 +440,29 @@ export function reweighFoodItem(item, grams) {
 const INTENSITY_WORDS = {
   easy: 0.85, gentle: 0.85, light: 0.85, steady: 1, moderate: 1,
   hard: 1.15, intense: 1.15, vigorous: 1.15, brutal: 1.25, allout: 1.25,
+}
+
+/**
+ * Where the session happened and in what weather, when the log says so.
+ *
+ * The heat adjustment normally keys off the profile's climate, which is a
+ * blunt instrument: a Dubai resident on a treadmill is not thermoregulating,
+ * and the same resident out at 6am in January is not either. Saying "outside
+ * warm" or "outside cool" overrides the assumption for that one entry, and
+ * "treadmill"/"indoor" says the weather is irrelevant.
+ *
+ * @returns {{conditions: 'warm'|'cool'|null, outdoor: boolean|null, matched: string}|null}
+ */
+function extractConditions(text) {
+  const outsideWarm = text.match(/\b(?:outside|outdoors?|out)\s+(?:in\s+the\s+)?(?:warm|heat|hot|sun|humid)\b/)
+  if (outsideWarm) return { conditions: 'warm', outdoor: true, matched: outsideWarm[0] }
+  const outsideCool = text.match(/\b(?:outside|outdoors?|out)\s+(?:in\s+the\s+)?(?:cool|cold|cooler|shade|evening|early)\b/)
+  if (outsideCool) return { conditions: 'cool', outdoor: true, matched: outsideCool[0] }
+  const indoor = text.match(/\b(?:indoors?|inside|air conditioned|aircon|gym floor)\b/)
+  if (indoor) return { conditions: 'cool', outdoor: false, matched: indoor[0] }
+  const outside = text.match(/\b(?:outside|outdoors)\b/)
+  if (outside) return { conditions: null, outdoor: true, matched: outside[0] }
+  return null
 }
 
 /** Pull a duration in minutes out of a phrase, handling "1h30", "1:15", "45 mins". */
@@ -653,6 +680,9 @@ export function parseWorkoutPhrase(phrase, weightKg = 80) {
     }
   }
 
+  const conditions = extractConditions(working)
+  if (conditions) working = working.replace(conditions.matched, ' ')
+
   const duration = extractMinutes(working)
   if (duration) working = working.replace(duration.matched, ' ')
   const distance = extractDistanceKm(working)
@@ -697,7 +727,11 @@ export function parseWorkoutPhrase(phrase, weightKg = 80) {
           : null
     : null
 
-  if (distance && minutes && mode) {
+  // Uphill walking is priced by gradient, not pace: recomputing it from
+  // speed would quietly downgrade a brutal incline session to a stroll.
+  const gradeDriven = activity.id.startsWith('walk_uphill')
+
+  if (distance && minutes && mode && !gradeDriven) {
     const mph = (distance.km * 0.621371) / (minutes / 60)
     met = metForSpeed(mode, mph)
   } else if (distance && !minutes && mode) {
@@ -716,7 +750,9 @@ export function parseWorkoutPhrase(phrase, weightKg = 80) {
     distanceKm: distance ? round(distance.km, 2) : null,
     met: round(met, 1),
     tags: activity.tags,
-    outdoor: isOutdoor(activity.id, working),
+    // An explicit "outside warm" / "indoor" in the log beats the guess.
+    outdoor: conditions?.outdoor ?? isOutdoor(activity.id, raw),
+    conditions: conditions?.conditions ?? null,
     recognised: true,
   }
 }

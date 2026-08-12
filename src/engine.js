@@ -10,6 +10,7 @@
 
 import { activityKcal } from './parse.js'
 import { PLANS } from './data/plans.js'
+import { freeSugarTarget } from './sugar.js'
 import { itemMuscleEffort } from './muscles.js'
 
 /**
@@ -111,6 +112,11 @@ export function bmiInfo(profile) {
 export const HEAT_MULTIPLIER = 1.08
 
 export function climateAdjustedKcal(baseKcal, item, profile) {
+  // An explicit condition on the entry beats the profile's climate: a
+  // treadmill in an air-conditioned gym is not a Dubai afternoon, and a
+  // 6am walk in January is not either. Saying so overrides the guess.
+  if (item?.conditions === 'cool') return Math.round(baseKcal)
+  if (item?.conditions === 'warm') return Math.round(baseKcal * HEAT_MULTIPLIER)
   if (profile?.climate === 'hot' && item?.outdoor) {
     return Math.round(baseKcal * HEAT_MULTIPLIER)
   }
@@ -229,12 +235,18 @@ export function targetsFor(p, exerciseKcal = 0) {
   // 14 g fibre per 1000 kcal is the standard population recommendation.
   const fibre = Math.round((finalCalories / 1000) * 14)
 
+  // Free sugars: UK policy caps them at 5% of daily energy, which the NHS
+  // publishes as 30 g for adults. This is a limit to stay under, not a
+  // target to hit — the UI colours it accordingly.
+  const freeSugar = freeSugarTarget(finalCalories)
+
   return {
     calories: finalCalories,
     protein: finalProtein,
     carbs: finalCarbs,
     fat: finalFat,
     fibre,
+    freeSugar,
     plan: plan ? { id: plan.id, name: plan.name } : null,
     maintenance: Math.round(maintenance),
     baseline: base,
@@ -247,7 +259,7 @@ export function targetsFor(p, exerciseKcal = 0) {
   }
 }
 
-const EMPTY_TOTALS = { kcal: 0, protein: 0, carbs: 0, fat: 0, fibre: 0, sugar: 0 }
+const EMPTY_TOTALS = { kcal: 0, protein: 0, carbs: 0, fat: 0, fibre: 0, sugar: 0, freeSugar: 0 }
 
 /** Sum the nutrition across every food item logged in a set of meals. */
 export function sumMeals(meals) {
@@ -265,6 +277,7 @@ export function sumMeals(meals) {
       totals.fat += item.fat || 0
       totals.fibre += item.fibre || 0
       totals.sugar += item.sugar || 0
+      totals.freeSugar += item.freeSugar || 0
       if (item.recognised === false) unrecognised += 1
       alcoholUnits += item.units || 0
       for (const tag of item.tags || []) {
@@ -409,7 +422,7 @@ export function buildWeek(days) {
   const logged = days.filter((d) => d.logged)
   if (!logged.length) {
     return { days: days.length, loggedDays: 0, avgIn: 0, avgOut: 0, avgNet: 0,
-      avgProtein: 0, trainingDays: 0, totalTrainingMinutes: 0, projectedKgPerWeek: 0,
+      avgProtein: 0, avgFreeSugar: 0, trainingDays: 0, totalTrainingMinutes: 0, projectedKgPerWeek: 0,
       strengthDays: 0, alcoholDays: 0, equivalentModerateMinutes: 0 }
   }
   const sum = (fn) => logged.reduce((acc, d) => acc + fn(d), 0)
@@ -423,6 +436,7 @@ export function buildWeek(days) {
     avgNet: Math.round(avgNet),
     avgProtein: Math.round(sum((d) => d.nutrition.protein) / logged.length),
     avgFibre: Math.round(sum((d) => d.nutrition.fibre) / logged.length),
+    avgFreeSugar: Math.round(sum((d) => d.nutrition.freeSugar || 0) / logged.length),
     trainingDays: logged.filter((d) => d.training.minutes > 0).length,
     strengthDays: logged.filter((d) => d.training.strengthMinutes > 0).length,
     alcoholDays: logged.filter((d) => d.alcoholKcal > 0).length,

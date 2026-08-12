@@ -299,10 +299,20 @@ export function auditDay(mealEntries, day) {
       why: `Only ${round(n.fibre)} g fibre against a ${t.fibre} g target. Vegetables, oats, beans — pick one and add it.`,
     })
   }
-  if ((n.sugar || 0) >= 60) {
+  // Free sugars, not total: the NHS limit is about added sugar, honey,
+  // syrups and juice — never the sugar inside whole fruit or plain milk.
+  const freeSugar = n.freeSugar || 0
+  if (freeSugar > t.freeSugar) {
+    const worst = sorted
+      .filter((i) => (i.freeSugar || 0) >= 8)
+      .sort((a, b) => (b.freeSugar || 0) - (a.freeSugar || 0))
+      .slice(0, 3)
+      .map((i) => `${i.name} (${round(i.freeSugar)} g)`)
     findings.push({
       kind: 'note',
-      why: `${round(n.sugar)} g of total sugars today. The NHS free-sugars guide is 30 g — fruit is fine, the rest is worth a look.`,
+      why: `${round(freeSugar)} g of free sugars against the ${t.freeSugar} g NHS limit`
+        + (worst.length ? ` — mostly ${worst.join(', ')}.` : '.')
+        + ` Fruit and milk sugars are excluded, so this is all added sugar, syrup or juice.`,
     })
   }
 

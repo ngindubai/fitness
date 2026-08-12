@@ -51,6 +51,10 @@ const CARDIO_MUSCLES = {
   swim: { lats: 0.5, front_delts: 0.5, triceps: 0.5, mid_back: 0.25 },
   cycle: { quads: 0.5, glutes: 0.5, hamstrings: 0.25, calves: 0.25 },
   run: { quads: 0.5, hamstrings: 0.5, calves: 0.5, glutes: 0.5 },
+  // Gradient shifts the work rearwards and upwards: uphill walking loads the
+  // glutes and calves far harder than the same minutes on the flat. Listed
+  // before `walk` so the prefix fallback matches the more specific id first.
+  walk_uphill: { glutes: 0.5, calves: 0.5, quads: 0.5, hamstrings: 0.5 },
   walk: { quads: 0.25, glutes: 0.25, calves: 0.5, hamstrings: 0.25 },
 }
 

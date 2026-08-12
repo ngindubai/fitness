@@ -719,6 +719,11 @@ nav.tabs button[aria-current='true'] { color: var(--accent); font-weight: 600; }
 .rec-ex { cursor: default; }
 .rec-ex .rec-muscles { color: var(--faint); font-size: 0.74rem; margin-left: 6px; }
 
+/* Walking conditions toggle */
+.walk-label { display: block; color: var(--muted); font-size: 0.75rem; margin-bottom: 6px; letter-spacing: 0.02em; }
+.walk-seg { flex-wrap: wrap; }
+.walk-seg button { flex: 1 1 44%; font-size: 0.76rem; }
+
 /* Demo animation in the exercise picker */
 .picked-demo { margin: 0 0 8px; }
 .picked-demo .fig { width: min(300px, 100%); display: block; margin: 0 auto; }

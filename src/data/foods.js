@@ -13,6 +13,8 @@
  * good enough for trend tracking, not laboratory figures.
  */
 
+import { freeSugarShareFor } from '../sugar.js'
+
 // prettier-ignore
 const ROWS = [
   // ---------------------------------------------------------------- poultry
@@ -626,14 +628,22 @@ const TAG_SPLIT = /\s+/
 
 /** @type {Food[]} */
 export const FOODS = ROWS.map(
-  ([id, name, aliases, kcal, protein, carbs, fat, fibre, sugar, unitName, unitGrams, tags]) => ({
-    id,
-    name,
-    aliases: String(aliases).split('|').filter(Boolean),
-    per100: { kcal, protein, carbs, fat, fibre, sugar },
-    unit: { name: unitName, grams: unitGrams },
-    tags: String(tags).split(TAG_SPLIT).filter(Boolean),
-  })
+  ([id, name, aliases, kcal, protein, carbs, fat, fibre, sugar, unitName, unitGrams, tags]) => {
+    const food = {
+      id,
+      name,
+      aliases: String(aliases).split('|').filter(Boolean),
+      per100: { kcal, protein, carbs, fat, fibre, sugar },
+      unit: { name: unitName, grams: unitGrams },
+      tags: String(tags).split(TAG_SPLIT).filter(Boolean),
+    }
+    // How much of that sugar figure counts against the NHS guideline. Total
+    // sugars include the fruit and the milk; free sugars are the ones the
+    // advice is actually about. See sugar.js.
+    food.freeSugarShare = freeSugarShareFor(food)
+    food.per100.freeSugar = Math.round(sugar * food.freeSugarShare * 10) / 10
+    return food
+  }
 )
 
 export const FOODS_BY_ID = new Map(FOODS.map((f) => [f.id, f]))

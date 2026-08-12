@@ -6,12 +6,12 @@
  */
 
 import { parseMeal, parseWorkout, activityKcal, reweighFoodItem, suggestFoods, suggestWorkouts } from './parse.js'
-import { buildDay, buildWeek, summarisePeriod, targetsFor, climateAdjustedKcal, DEFAULT_PROFILE, BASELINE_LEVELS, GOALS, CLIMATES, EAT_BACK, bmiInfo, BMI_BANDS } from './engine.js'
+import { buildDay, buildWeek, summarisePeriod, targetsFor, climateAdjustedKcal, HEAT_MULTIPLIER, DEFAULT_PROFILE, BASELINE_LEVELS, GOALS, CLIMATES, EAT_BACK, bmiInfo, BMI_BANDS } from './engine.js'
 import { reviewDay, reviewWeek } from './coach.js'
 import { auditDay } from './food-audit.js'
 import { recommendMeals, suggestDay, buildTasteProfile } from './recommend.js'
 import { FOODS, FOODS_BY_ID } from './data/foods.js'
-import { ACTIVITIES } from './data/activities.js'
+import { ACTIVITIES, ACTIVITIES_BY_ID } from './data/activities.js'
 import { issueToken, verifyToken, checkPasscode, extractToken, sessionCookie, clearedCookie, hashPasscode, verifyPasscodeHash } from './auth.js'
 import { planForDate, itemsForBlock, planOverview } from './plan.js'
 import { MUSCLES, muscleEffortFor, muscleRangeStats, recommendWorkout, recoveringMuscles, cardioMusclesFor, RECOVERY_HOURS } from './muscles.js'
@@ -49,6 +49,23 @@ const CARDIO_MACHINES = new Set([
   'treadmill', 'elliptical', 'rowing_machine', 'stationary_bike', 'spin_class',
   'assault_bike', 'stairs', 'ski_erg',
 ])
+
+/**
+ * Walking is the most-logged exercise there is and the one where conditions
+ * change the answer most: the same hour costs 4.3 METs on the flat and 8.0
+ * on a steep treadmill incline, and heat adds ~8% on top outdoors. So the
+ * picker offers walking with those conditions as an explicit choice rather
+ * than making people describe the weather in prose.
+ *
+ * Each option maps to a real activity id and the phrase the logger parses,
+ * so a picked walk and a typed one produce identical entries.
+ */
+const WALK_OPTIONS = [
+  { id: 'flat', label: 'Flat / level', phrase: 'brisk walk', activityId: 'walk_brisk' },
+  { id: 'uphill', label: 'Intense uphill treadmill', phrase: 'uphill treadmill', activityId: 'walk_uphill_steep' },
+  { id: 'warm', label: 'Outside · warm', phrase: 'brisk walk', activityId: 'walk_brisk', suffix: 'outside warm' },
+  { id: 'cool', label: 'Outside · cool', phrase: 'brisk walk', activityId: 'walk_brisk', suffix: 'outside cool' },
+]
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 const isValidDate = (value) => typeof value === 'string' && ISO_DATE.test(value)
@@ -502,6 +519,19 @@ export async function handleApi(request, ctx) {
           const muscles = cardioMusclesFor(a.id)
           return { id: a.id, name: a.name, met: a.met, muscles, tiers: muscles ? muscleTiers({ muscles }) : null }
         }),
+      // Walking, with its conditions priced out so the difference is visible
+      // before it is logged: 30 minutes uphill is worth nearly two flat ones.
+      walking: {
+        id: 'walk', name: 'Walking',
+        muscles: cardioMusclesFor('walk'),
+        options: WALK_OPTIONS.map((option) => {
+          const activity = ACTIVITIES_BY_ID.get(option.activityId)
+          const met = activity?.met || 4.3
+          const base = Math.round((met - 1) * profile.weightKg * (30 / 60))
+          const kcal30 = option.id === 'warm' ? Math.round(base * HEAT_MULTIPLIER) : base
+          return { ...option, met, kcal30 }
+        }),
+      },
     })
   }
 

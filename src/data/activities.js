@@ -20,7 +20,13 @@ const ROWS = [
   // ------------------------------------------------------------------ walking
   ['walk_slow', 'Walking (slow, 2-2.4 mph)', 'slow walk|stroll|strolling|dog walk|walking the dog', 2.8, 'cardio neat', 30],
   ['walk_moderate', 'Walking (moderate, 3 mph)', 'walk|walking|walked|went for a walk', 3.5, 'cardio neat', 30],
-  ['walk_brisk', 'Walking (brisk, 3.5-4 mph)', 'brisk walk|fast walk|walked briskly|power walk|brisk walking', 4.5, 'cardio', 30],
+  ['walk_brisk', 'Walking (brisk, 3.5 mph)', 'brisk walk|fast walk|walked briskly|power walk|brisk walking', 4.3, 'cardio', 30],
+  // Uphill walking is a different exercise, not a harder mood: the compendium
+  // prices a 1-5% grade at 5.3 and a 6-15% grade at 8.0 - the latter costs
+  // nearly double flat walking, which is why treadmill incline work is the
+  // best calorie-per-minute deal in the gym short of running.
+  ['walk_uphill', 'Walking (uphill, 1-5% grade)', 'uphill walk|walking uphill|incline walk|walk incline|slight incline walk', 5.3, 'cardio', 30],
+  ['walk_uphill_steep', 'Walking (steep uphill / incline treadmill, 6-15%)', 'uphill treadmill|incline treadmill|treadmill incline|steep uphill|intense uphill|steep incline walk|hill walk', 8.0, 'cardio vigorous', 30],
   ['walk_very_brisk', 'Walking (very brisk, 4-4.4 mph)', 'very brisk walk|marching', 5.5, 'cardio', 30],
   ['hiking', 'Hiking', 'hike|hiking|hiked|rambling|trekking', 6.0, 'cardio vigorous', 90],
   ['stairs', 'Stair climbing', 'stairs|stair climbing|stairmaster|step machine', 9.3, 'cardio vigorous', 15],

@@ -56,6 +56,7 @@ test('a timed-and-measured walk is graded by its true pace', () => {
   const kcal = climateAdjustedKcal(activityKcal(item, 115), item, GARETH)
   assert.ok(kcal >= 240 && kcal <= 260, `4.3 km in 1 h → ${kcal} kcal`)
   // Saying "brisk" earns more, because pace beats adjectives only when given.
+  // 4.3 is the compendium figure for 3.5 mph level walking (code 17200).
   const [brisk] = parseWorkout('brisk walk 1 hour')
-  assert.equal(brisk.met, 4.5)
+  assert.equal(brisk.met, 4.3)
 })

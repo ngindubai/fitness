@@ -960,14 +960,28 @@ function renderBars(day) {
     { label: 'Carbs', value: day.nutrition.carbs, target: day.targets.carbs, unit: 'g' },
     { label: 'Fat', value: day.nutrition.fat, target: day.targets.fat, unit: 'g' },
     { label: 'Fibre', value: day.nutrition.fibre, target: day.targets.fibre, unit: 'g' },
+    // A ceiling, not a goal — and free sugars, so fruit and milk do not
+    // count against it. Total sugars are shown in the tooltip for context.
+    {
+      label: 'Sugar',
+      value: day.nutrition.freeSugar || 0,
+      target: day.targets.freeSugar,
+      unit: 'g',
+      limit: true,
+      title: `Free sugars (added sugar, honey, syrups and juice) against the NHS `
+        + `${Math.round(day.targets.freeSugar)} g limit. Total sugars today including `
+        + `fruit and milk: ${Math.round(day.nutrition.sugar || 0)} g.`,
+    },
   ]
   $('bars').innerHTML = rows.map((row) => {
     const pct = row.target ? (row.value / row.target) * 100 : 0
-    const tone = row.label === 'Fat'
-      ? (pct > 115 ? 'bad' : pct > 100 ? 'warn' : 'good')
-      : (pct >= 90 ? 'good' : pct >= 60 ? 'warn' : 'bad')
+    const tone = row.limit
+      ? (pct > 100 ? 'bad' : pct > 75 ? 'warn' : 'good')
+      : row.label === 'Fat'
+        ? (pct > 115 ? 'bad' : pct > 100 ? 'warn' : 'good')
+        : (pct >= 90 ? 'good' : pct >= 60 ? 'warn' : 'bad')
     return `
-      <div class="bar-row">
+      <div class="bar-row"${row.title ? ` title="${escapeHtml(row.title)}"` : ''}>
         <span class="label">${row.label}</span>
         <span class="bar-track"><span class="bar-fill ${tone}" style="width:${Math.min(100, Math.max(0, pct))}%"></span></span>
         <span class="value">${Math.round(row.value)}${row.unit} / ${Math.round(row.target)}${row.unit}</span>
@@ -1647,12 +1661,13 @@ function renderExerciseList() {
   const list = $('exercise-list')
   list.innerHTML = ''
 
+  const walking = exerciseMenu.walking ? [{ ...exerciseMenu.walking, kind: 'walking' }] : []
   const rows = group === 'cardio'
-    ? exerciseMenu.cardio.map((c) => ({ ...c, kind: 'cardio' }))
+    ? walking.concat(exerciseMenu.cardio.map((c) => ({ ...c, kind: 'cardio' })))
     : exerciseMenu.exercises
         .filter((e) => group === 'all' || e.group === group)
         .map((e) => ({ ...e, kind: 'strength' }))
-        .concat(group === 'all' ? exerciseMenu.cardio.map((c) => ({ ...c, kind: 'cardio' })) : [])
+        .concat(group === 'all' ? walking.concat(exerciseMenu.cardio.map((c) => ({ ...c, kind: 'cardio' }))) : [])
 
   const filtered = rows.filter((r) => !query || r.name.toLowerCase().includes(query))
   for (const row of filtered) {
@@ -1661,7 +1676,9 @@ function renderExerciseList() {
     button.className = 'exercise-item'
     const sub = row.kind === 'cardio'
       ? 'cardio machine'
-      : Object.keys(row.muscles || {}).slice(0, 3).map((m) => m.replace('_', ' ')).join(', ')
+      : row.kind === 'walking'
+        ? 'flat · uphill · outdoors'
+        : Object.keys(row.muscles || {}).slice(0, 3).map((m) => m.replace('_', ' ')).join(', ')
     button.innerHTML = `<span>${escapeHtml(row.name)}</span><span class="meta">${escapeHtml(sub)}</span>`
     button.addEventListener('click', () => pickExercise(row))
     list.appendChild(button)
@@ -1700,7 +1717,17 @@ function pickExercise(row) {
   const burn = $('picked-burn')
   burn.textContent = row.kind === 'cardio'
     ? (row.met && state.profile ? `~${Math.max(1, Math.round((row.met - 1) * state.profile.weightKg * (20 / 60)))} kcal per 20 min for you` : '')
-    : (row.kcalPerSet ? `~${row.kcalPerSet} kcal per set for you (MET ${row.met})` : '')
+    : row.kind === 'walking' ? ''
+      : (row.kcalPerSet ? `~${row.kcalPerSet} kcal per set for you (MET ${row.met})` : '')
+
+  // Walking gets its terrain/weather toggle: the same 30 minutes is worth
+  // wildly different numbers flat, uphill, or outdoors in the heat.
+  $('picked-walk').classList.toggle('hidden', row.kind !== 'walking')
+  if (row.kind === 'walking') {
+    $('pk-walk').innerHTML = row.options.map((option, index) =>
+      `<button data-walk="${option.id}" aria-pressed="${index === 0}">${escapeHtml(option.label)}</button>`).join('')
+    renderWalkNote(row.options[0])
+  }
 
   const tiers = row.tiers
   $('picked-muscles').innerHTML = tiers
@@ -1711,9 +1738,41 @@ function pickExercise(row) {
           `${list.map((m) => `<span class="tier-muscle">${escapeHtml(m.replace(/_/g, ' '))}</span>`).join('')}</div>`)
         .join('')
     : ''
-  $('picked-strength').classList.toggle('hidden', row.kind === 'cardio')
-  $('picked-cardio').classList.toggle('hidden', row.kind !== 'cardio')
+  const timed = row.kind === 'cardio' || row.kind === 'walking'
+  $('picked-strength').classList.toggle('hidden', timed)
+  $('picked-cardio').classList.toggle('hidden', !timed)
+  // Walking is graded by terrain, not by an effort adjective — showing both
+  // would let the same session be counted hard twice.
+  $('pk-effort').classList.toggle('hidden', row.kind === 'walking')
 }
+
+/** Live kcal preview for the chosen walking condition, at the set duration. */
+function renderWalkNote(option) {
+  if (!option) return
+  const minutes = Math.max(1, Number($('pk-minutes').value) || 30)
+  const scaled = Math.round((option.kcal30 / 30) * minutes)
+  const flat = pickedExercise?.options?.[0]
+  const gain = flat && flat.kcal30 ? Math.round((option.kcal30 / flat.kcal30 - 1) * 100) : 0
+  const versus = option.id === 'cool'
+    ? ' — no heat penalty, so this is plain flat walking'
+    : gain > 0 ? ` — ${gain}% more than flat walking` : ''
+  $('pk-walk-note').textContent =
+    `MET ${option.met} · about ${scaled} kcal for ${minutes} min at your weight${versus}.`
+}
+
+$('pk-walk').addEventListener('click', (event) => {
+  const button = event.target.closest('button')
+  if (!button) return
+  document.querySelectorAll('#pk-walk button').forEach((b) =>
+    b.setAttribute('aria-pressed', String(b === button)))
+  renderWalkNote(pickedExercise?.options?.find((o) => o.id === button.dataset.walk))
+})
+
+$('pk-minutes').addEventListener('input', () => {
+  if (pickedExercise?.kind !== 'walking') return
+  const id = document.querySelector('#pk-walk button[aria-pressed="true"]')?.dataset.walk
+  renderWalkNote(pickedExercise.options.find((o) => o.id === id) || pickedExercise.options[0])
+})
 
 $('picked-back').addEventListener('click', () => {
   pickedDemo?.destroy()
@@ -1742,7 +1801,7 @@ $('picked-add').addEventListener('click', async () => {
   const weight = Number($('pk-weight').value)
 
   // Session mode: the pick becomes a row in the Plan screen's live session.
-  if (pickerMode === 'session' && pickedExercise.kind !== 'cardio') {
+  if (pickerMode === 'session' && pickedExercise.kind === 'strength') {
     sessionRows.push({ name: pickedExercise.name, sets, reps, weightKg: weight || null, logged: false })
     renderSessionRows()
     $('exercise-sheet').classList.add('hidden')
@@ -1751,7 +1810,7 @@ $('picked-add').addEventListener('click', async () => {
   }
 
   // Plan-edit mode: the pick is stored on the plan session permanently.
-  if (pickerMode.startsWith('plan-edit:') && pickedExercise.kind !== 'cardio') {
+  if (pickerMode.startsWith('plan-edit:') && pickedExercise.kind === 'strength') {
     const skey = pickerMode.slice('plan-edit:'.length)
     await savePlanEdit(skey, (edit) => {
       const lower = pickedExercise.name.toLowerCase()
@@ -1767,7 +1826,14 @@ $('picked-add').addEventListener('click', async () => {
   }
 
   let phrase
-  if (pickedExercise.kind === 'cardio') {
+  if (pickedExercise.kind === 'walking') {
+    const minutes = Math.max(1, Number($('pk-minutes').value) || 30)
+    const id = document.querySelector('#pk-walk button[aria-pressed="true"]')?.dataset.walk
+    const option = pickedExercise.options.find((o) => o.id === id) || pickedExercise.options[0]
+    // The option owns the wording, so a picked walk parses to exactly the
+    // activity (and heat treatment) the toggle promised.
+    phrase = `${option.phrase} ${minutes} min${option.suffix ? ` ${option.suffix}` : ''}`
+  } else if (pickedExercise.kind === 'cardio') {
     const minutes = Math.max(1, Number($('pk-minutes').value) || 20)
     const effort = document.querySelector('#pk-effort button[aria-pressed="true"]')?.dataset.effort || ''
     phrase = `${cleanName} ${minutes} min${effort ? ` ${effort}` : ''}`

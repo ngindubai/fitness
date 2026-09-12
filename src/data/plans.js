@@ -1,5 +1,12 @@
 /**
- * Six-month training and food plans, encoded from the two plan documents.
+ * Six-month training and food plans, encoded from the plan documents.
+ *
+ * Retiring a plan means deleting its entry here and nothing else. Every
+ * consumer looks it up as `PLANS[planId]` and already handles a miss, and
+ * `withoutRetiredPlan` in ../api.js clears the dangling attachment off any
+ * profile that was following it. Targets then fall back to the derived
+ * Mifflin-St Jeor numbers, and entries already logged from the plan stay put
+ * as ordinary entries. ("Six Months Back" was retired this way.)
  *
  * These are stored as weekly/phase *templates*, not 180 pre-written days:
  * any date's prescription is computed on demand from the template plus the
@@ -14,62 +21,6 @@
  */
 
 const ex = (name, group, note = null) => ({ name, group, ...(note ? { note } : {}) })
-
-// ---------------------------------------------------------------- Gareth
-
-const GARETH_SESSION_A1 = {
-  title: 'Session A — full body',
-  exercises: [
-    ex('Goblet squat', 'legs'),
-    ex('Dumbbell bench press', 'push'),
-    ex('Lat pulldown', 'pull'),
-    ex('Dumbbell Romanian deadlift', 'legs'),
-    ex('Plank', 'core', 'Hard 30–45 s holds beat soft minutes'),
-  ],
-}
-const GARETH_SESSION_B1 = {
-  title: 'Session B — full body',
-  exercises: [
-    ex('Split squat', 'legs'),
-    ex('Seated dumbbell shoulder press', 'push'),
-    ex('One-arm dumbbell row', 'pull'),
-    ex('Hip thrust', 'legs'),
-    ex('Dead bug', 'core'),
-  ],
-}
-
-const GARETH_SESSION_A3 = {
-  title: 'Session A — legs & push',
-  exercises: [
-    ex('Goblet squat', 'legs'),
-    ex('Split squat', 'legs'),
-    ex('Hip thrust', 'legs'),
-    ex('Dumbbell bench press', 'push'),
-    ex('Seated dumbbell shoulder press', 'push'),
-    ex('Lateral raise', 'push'),
-  ],
-}
-const GARETH_SESSION_B3 = {
-  title: 'Session B — pull & core',
-  exercises: [
-    ex('Lat pulldown', 'pull'),
-    ex('One-arm dumbbell row', 'pull'),
-    ex('Dumbbell Romanian deadlift', 'legs'),
-    ex('Dumbbell curl', 'pull'),
-    ex('Plank', 'core'),
-    ex('Dead bug', 'core'),
-  ],
-}
-const GARETH_SESSION_C3 = {
-  title: 'Session C — full body',
-  exercises: [
-    ex('Goblet squat', 'legs'),
-    ex('Dumbbell bench press', 'push'),
-    ex('Lat pulldown', 'pull'),
-    ex('Dumbbell Romanian deadlift', 'legs'),
-    ex('Rowing machine finisher', 'full', '5 easy minutes to close'),
-  ],
-}
 
 // ------------------------------------------------------------------ Katy
 
@@ -139,119 +90,6 @@ const KATY_SESSION_C_LATE = {
 // ------------------------------------------------------------------ plans
 
 export const PLANS = {
-  sixmonthsback: {
-    id: 'sixmonthsback',
-    name: 'Six Months Back',
-    owner: 'Gareth',
-    weeks: 26,
-    gymDays: [0, 2, 4], // Mon / Wed / Fri (0 = Monday)
-    deloadWeeks: [8, 16, 24],
-    testWeek: 26,
-    kcal: 2300,
-    macros: { protein: 180, carbs: 225, fat: 75 },
-    stepsTarget: 8000,
-    stepsNote: 'Outside means early or late — not the 2 pm sun.',
-    restNote: 'Rest day. Steps still count, and the day between sessions is where the muscle is actually built.',
-    phases: [
-      {
-        number: 1, name: 'Turn up', weeks: [1, 4],
-        focus: 'Technique and showing up. Alternate sessions A and B, a day between them.',
-        scheme: { sets: 2, reps: '10–12', effort: 'Stop 4–5 reps short of failure', rest: '90 s' },
-        rotation: 'alternate',
-        sessions: [GARETH_SESSION_A1, GARETH_SESSION_B1],
-        cardio: [
-          { title: 'Incline walk — 12 min', detail: '5–6% incline at about 5 km/h. No jogging before week 13.', logText: 'treadmill walk 12 min' },
-        ],
-        restCardio: null,
-      },
-      {
-        number: 2, name: 'Build the base', weeks: [5, 12],
-        focus: 'Load goes up. Same alternating sessions plus one isolation lift each.',
-        scheme: { sets: 3, reps: '8–12', effort: 'Last set 2–3 reps short of failure', rest: '90 s' },
-        rotation: 'alternate',
-        sessions: [
-          { ...GARETH_SESSION_A1, exercises: [...GARETH_SESSION_A1.exercises, ex('Lateral raise', 'push')] },
-          { ...GARETH_SESSION_B1, exercises: [...GARETH_SESSION_B1.exercises, ex('Dumbbell curl', 'pull')] },
-        ],
-        cardio: [
-          { title: 'Steady cardio — 20–25 min', detail: 'Incline walk, cross trainer or rower. Conversational pace.', logText: 'cross trainer 22 min' },
-        ],
-        restCardio: { title: 'Optional walk — 30 min', detail: 'Easy outdoor walk on one off day. Early, before the heat.', logText: 'walked 30 min', optional: true },
-      },
-      {
-        number: 3, name: 'Get strong', weeks: [13, 20],
-        focus: 'Three different sessions a week: legs & push, pull & core, full body.',
-        scheme: { sets: 3, reps: '6–12', effort: 'Last set 1–2 reps short of failure', rest: '2 min on the big lifts' },
-        rotation: 'weekly',
-        sessions: [GARETH_SESSION_A3, GARETH_SESSION_B3, GARETH_SESSION_C3],
-        cardio: [
-          { title: 'Steady — 25 min', detail: 'Incline walk, cross trainer or rower.', logText: 'cross trainer 25 min' },
-          { title: 'Intervals — 6–8 × 1 min hard / 2 min easy', detail: 'Rower or cross trainer. First jogging is allowed from here.', logText: 'rowing machine 20 min hard' },
-          { title: 'Optional walk-run — 6 × (1 min jog / 3 min walk)', detail: 'Treadmill. Skip it if the knees complain.', logText: 'treadmill 24 min', optional: true },
-        ],
-        restCardio: { title: 'Optional walk — 30 min', detail: 'Easy outdoor walk. Early, before the heat.', logText: 'walked 30 min', optional: true },
-      },
-      {
-        number: 4, name: 'Make it yours', weeks: [21, 26],
-        focus: 'Heavier, plus one back-off set on your best lift each session.',
-        scheme: { sets: 4, reps: '6–15', effort: 'Top set 1 rep short of failure, then one back-off set', rest: '2 min on the big lifts' },
-        rotation: 'weekly',
-        sessions: [GARETH_SESSION_A3, GARETH_SESSION_B3, GARETH_SESSION_C3],
-        cardio: [
-          { title: 'Steady — 30 min', detail: 'Your pick: incline walk, cross trainer or rower.', logText: 'cross trainer 30 min' },
-          { title: 'Intervals — 8 × 1 min hard / 2 min easy', detail: 'Rower or cross trainer.', logText: 'rowing machine 24 min hard' },
-          { title: 'Weekend 5 km walk', detail: 'Saturday or Sunday, outdoors, early.', logText: 'walked 5 km', optional: true },
-        ],
-        restCardio: { title: 'Weekend 5 km walk', detail: 'Outdoors, early, before the heat.', logText: 'walked 5 km', optional: true },
-      },
-    ],
-    testSession: {
-      title: 'Test week — see what six months bought',
-      exercises: [
-        ex('Goblet squat — heaviest clean set of 5', 'legs'),
-        ex('Shoulder press — heaviest clean set of 5', 'push'),
-        ex('Plank — longest hold', 'core'),
-        ex('2,000 m row — fastest time', 'full'),
-      ],
-    },
-    meals: {
-      breakfast: [
-        { name: 'Four-egg omelette', kcal: 520, protein: 40, desc: '4 eggs, spinach, half an onion, 30 g cheddar, slice of sourdough' },
-        { name: 'Yoghurt bowl', kcal: 470, protein: 52, desc: '250 g Greek yoghurt, 30 g whey, 100 g blueberries, honey, 10 g almonds' },
-        { name: 'Overnight oats', kcal: 530, protein: 42, desc: '60 g oats, 250 ml milk, 30 g whey, banana, cinnamon' },
-        { name: 'Halloumi scramble', kcal: 560, protein: 42, desc: '3 eggs, 80 g grilled halloumi, rocket, one small pitta' },
-      ],
-      lunch: [
-        { name: 'Chicken shawarma wrap', kcal: 620, protein: 55, desc: 'Wholemeal wrap, 180 g chicken thigh, garlic sauce, pickles, cabbage' },
-        { name: 'Kofta wrap', kcal: 640, protein: 48, desc: '150 g lean beef kofta, wrap, mint yoghurt, red onion, lettuce' },
-        { name: 'Tuna & cottage cheese on rye', kcal: 560, protein: 55, desc: '2 slices rye, tin of tuna, 100 g cottage cheese, cucumber salad' },
-        { name: 'Chicken & rice bowl', kcal: 640, protein: 52, desc: '180 g chicken, 150 g rice, cucumber, pickled onion, garlic yoghurt' },
-      ],
-      dinner: [
-        { name: 'Shish taouk plate', kcal: 700, protein: 58, desc: '250 g grilled chicken, 150 g rice, courgette, onion, garlic sauce' },
-        { name: 'Salmon & potatoes', kcal: 720, protein: 45, desc: '180 g salmon, 250 g new potatoes, green beans, butter, lemon' },
-        { name: 'Tomato-free chilli', kcal: 690, protein: 50, desc: 'Lean beef, peppers, kidney beans, paprika, over 150 g rice' },
-        { name: 'Lamb chops', kcal: 740, protein: 48, desc: '3 grilled chops, roasted carrots and broccoli, small pitta' },
-        { name: 'Chicken tikka', kcal: 700, protein: 60, desc: '250 g dry tikka, two roti, raita, side salad. Not the creamy curries' },
-      ],
-      snack: [
-        { name: 'Skyr & almonds', kcal: 330, protein: 28, desc: '200 g skyr, 20 g almonds' },
-        { name: 'Shake & fruit', kcal: 270, protein: 32, desc: '40 g whey in water, one banana' },
-        { name: 'Biltong & apple', kcal: 260, protein: 27, desc: '50 g biltong, one apple' },
-        { name: 'Cottage cheese & pineapple', kcal: 250, protein: 26, desc: '200 g cottage cheese, 100 g pineapple' },
-        { name: 'Eggs & rice cakes', kcal: 300, protein: 21, desc: '3 boiled eggs, 2 rice cakes, salt' },
-      ],
-    },
-    rules: [
-      'Two sessions plus protein is still a passing week. The floor matters more than the ceiling.',
-      'Add weight when you hit the top of the rep range on every set. At the 20 kg dumbbell ceiling: more reps, then slower tempo, then single-limb, then the stack machine.',
-      'No jogging before week 13 — incline walking carries the cardio until then.',
-      'Drinking night goes after the last session of the week, not before a training day.',
-      'Weekly weigh-in, same morning. If the four-week average is flat, take 150 kcal off.',
-      'No tomato, no mushroom — the meal bank is already built around that.',
-    ],
-  },
-
   sixmonthsstronger: {
     id: 'sixmonthsstronger',
     name: 'Six Months Stronger',

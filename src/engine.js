@@ -50,6 +50,16 @@ export const GOALS = {
  * gets two of those three wrong, because the qualifying clause carries words
  * from the opposite category.
  *
+ * The catch in a positional race is that a filler verb can win it. "Keep",
+ * "stay" and "hold" are the three most common ways to *open* an English
+ * sentence that has nothing to do with body weight — "keep going to the gym
+ * and lose 10kg", "stay consistent and drop 10kg", "I want to keep my muscle
+ * and lose 15kg" — so matching them bare made every one of those read as
+ * maintenance and quietly cancelled an explicit loss goal. They only count as
+ * maintenance when what is being kept is the weight or the size itself, which
+ * is why they must be followed by one of those objects here. Bare "maintain"
+ * and "maintenance" need no object: nobody writes them by accident.
+ *
  * @param {string} text the user's own words
  * @param {'lose'|'maintain'|'gain'} fallback used when the text says nothing
  */
@@ -57,10 +67,12 @@ export function goalDirectionFrom(text, fallback = 'maintain') {
   const t = String(text || '').toLowerCase()
   if (!t.trim()) return fallback
 
+  // "keep/stay/hold" + optional determiners + the thing being held.
+  const HOLD = /\b(?:stay|staying|keep|keeping|hold|holding|remain)\s+(?:at\s+|on\s+|my\s+|the\s+|this\s+|current\s+)*(?:weight|weigh|same|size|shape|scale|where i am|as i am|what i am)\b/
   const PATTERNS = {
     lose: /\b(lose|losing|lost|drop|shed|cut|cutting|slim|leaner|lean down|lean out|trim|fat loss|weight loss|reduce (?:my )?(?:body ?)?fat|less fat|belly|waist|smaller)\b/,
     gain: /\b(gain|gaining|bulk|bulking|build (?:some )?muscle|building muscle|put on|add (?:some )?(?:muscle|size|mass)|mass|bigger|grow|hypertrophy|stronger|strength)\b/,
-    maintain: /\b(maintain|maintenance|stay|keep|hold|same weight)\b/,
+    maintain: new RegExp(`\\b(maintain|maintenance|same weight)\\b|${HOLD.source}`),
   }
 
   let best = null

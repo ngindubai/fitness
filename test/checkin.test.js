@@ -54,6 +54,59 @@ test('an empty goal falls back rather than guessing', () => {
   assert.equal(goalDirectionFrom(null), 'maintain')
 })
 
+test('a filler "keep"/"stay"/"hold" does not cancel an explicit loss goal', () => {
+  // "Keep", "stay" and "hold" are the commonest ways to open a sentence that
+  // has nothing to do with weight. Matching them bare made each of these read
+  // as maintenance, wiping out the deficit the user had just asked for.
+  assert.equal(goalDirectionFrom('Keep going to the gym and lose 10kg'), 'lose')
+  assert.equal(goalDirectionFrom('Stay consistent and drop 10kg'), 'lose')
+  assert.equal(goalDirectionFrom('I want to keep my muscle and lose 15kg'), 'lose')
+  assert.equal(goalDirectionFrom('keep training hard and build muscle'), 'gain')
+
+  // They still read as maintenance when it is the weight being kept.
+  assert.equal(goalDirectionFrom('Hold my weight and lose belly fat'), 'maintain')
+  assert.equal(goalDirectionFrom('stay the same weight but lose belly fat'), 'maintain')
+  assert.equal(goalDirectionFrom('keep my weight the same'), 'maintain')
+  assert.equal(goalDirectionFrom('stay at my current weight'), 'maintain')
+})
+
+test('an unreadable goal never puts a new account into a deficit', async () => {
+  // This has to go through the API, not through goalDirectionFrom's own
+  // default: the bug was that the production call sites passed a fallback of
+  // "lose", so a goal the parser could not read imposed 550 kcal/day of
+  // deficit on someone whose goal was to run further. Onboarding has no
+  // direction control, so nothing on screen would have revealed it.
+  const ctx = makeCtx()
+  const { token } = await (await call(ctx, '/login', { method: 'POST', body: { passcode: 'boss-code' } })).json()
+  const base = { sex: 'male', age: 37, heightCm: 178, weightKg: 115, baseline: 'light', rateKgPerWeek: 0.5 }
+
+  for (const goalText of ['Get fitter for football', 'Run a half marathon', 'Improve my health']) {
+    const fresh = makeCtx()
+    const { token: t } = await (await call(fresh, '/login', { method: 'POST', body: { passcode: 'boss-code' } })).json()
+    const { profile } = await (await call(fresh, '/profile', { method: 'PUT', token: t, body: { ...base, goalText } })).json()
+    assert.equal(profile.goal, 'maintain', `"${goalText}" should not be read as fat loss`)
+  }
+
+  // And the calories that follow are maintenance, not a deficit.
+  const unreadable = await (await call(ctx, '/profile', { method: 'PUT', token, body: { ...base, goalText: 'Get fitter for football' } })).json()
+  const explicit = await (await call(ctx, '/profile', { method: 'PUT', token, body: { ...base, goalText: 'Lose 10kg', goal: 'lose' } })).json()
+  assert.ok(unreadable.targets.calories > explicit.targets.calories,
+    `unreadable goal gave ${unreadable.targets.calories} kcal, a deficit against ${explicit.targets.calories}`)
+})
+
+test('an established profile keeps the direction it already had', async () => {
+  // The flip side: once someone has a direction, an unreadable new sentence
+  // must not quietly reset it to maintenance either.
+  const ctx = makeCtx()
+  const { token } = await (await call(ctx, '/login', { method: 'POST', body: { passcode: 'boss-code' } })).json()
+  await call(ctx, '/profile', {
+    method: 'PUT', token,
+    body: { sex: 'male', age: 37, heightCm: 178, weightKg: 115, onboarded: true, goalText: 'Lose 10kg', goal: 'lose' },
+  })
+  const { profile } = await (await call(ctx, '/profile', { method: 'PUT', token, body: { goalText: 'Feel better day to day' } })).json()
+  assert.equal(profile.goal, 'lose', 'an unreadable edit keeps the direction the user had chosen')
+})
+
 test('the goal round-trips through the API and re-reads on change', async () => {
   const ctx = makeCtx()
   const { token } = await (await call(ctx, '/login', { method: 'POST', body: { passcode: 'boss-code' } })).json()
@@ -305,6 +358,68 @@ test('a mistyped weight is refused rather than silently dropped', async () => {
   assert.equal(bad.status, 400)
   const listed = await (await call(ctx, '/checkins', { token })).json()
   assert.equal(listed.checkins.length, 0, 'nothing stored when the weight was rejected')
+})
+
+test('an out-of-range measurement is reported, not silently dropped', async () => {
+  const ctx = makeCtx()
+  const { token } = await (await call(ctx, '/login', { method: 'POST', body: { passcode: 'boss-code' } })).json()
+
+  // A waist measured in inches, and a misplaced decimal. Both used to be
+  // discarded while the save still reported success and the form cleared —
+  // so the number was gone and the composition readout stayed empty.
+  for (const measurements of [{ waist: 34 }, { waist: 850 }, { arm: 13 }]) {
+    const response = await call(ctx, '/checkins', { method: 'POST', token, body: { measurements, notes: 'felt good' } })
+    assert.equal(response.status, 400, `${JSON.stringify(measurements)} should be refused`)
+    const { error } = await response.json()
+    assert.match(error, /between \d+ and \d+ cm/, 'the message names the range')
+  }
+  assert.equal((await (await call(ctx, '/checkins', { token })).json()).checkins.length, 0,
+    'nothing stored when a measurement was rejected')
+
+  // In-range values still save, and a blank field is not an error.
+  const ok = await call(ctx, '/checkins', { method: 'POST', token, body: { measurements: { waist: 104, chest: '' }, notes: 'fine' } })
+  assert.equal(ok.status, 201)
+  assert.equal((await ok.json()).checkin.measurements.waist, 104)
+})
+
+test('a malformed check-in body is a 400, not a crash', async () => {
+  // readJson returns null for a missing, empty or malformed body, and a
+  // default parameter does not cover null — so this endpoint answered 500.
+  const ctx = makeCtx()
+  const { token } = await (await call(ctx, '/login', { method: 'POST', body: { passcode: 'boss-code' } })).json()
+  for (const raw of [undefined, '', 'null', '{oops', '[]', '"hi"', '7']) {
+    const response = await handleApi(new Request('http://x/api/checkins', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: raw,
+    }), ctx)
+    assert.equal(response.status, 400, `body ${JSON.stringify(raw)} should be a 400`)
+  }
+})
+
+test('a date that is not a real day is refused before anything is written', async () => {
+  // "2026-99-99" passed the shape check, so the check-in was stored and the
+  // weigh-in step then threw on it — a 500 that left a row no list or delete
+  // window could ever reach.
+  const ctx = makeCtx()
+  const { token } = await (await call(ctx, '/login', { method: 'POST', body: { passcode: 'boss-code' } })).json()
+  const today = (await (await call(ctx, '/profile', { token })).json()).today
+
+  for (const date of ['2026-99-99', '2026-13-01', '2026-02-31', '2026-00-10']) {
+    const response = await call(ctx, '/checkins', { method: 'POST', token, body: { date, weightKg: 88 } })
+    assert.notEqual(response.status, 500, `${date} must not crash the endpoint`)
+    // It falls back to today rather than storing an impossible date.
+    if (response.status === 201) {
+      assert.equal((await response.json()).checkin.date, today, `${date} should not be stored verbatim`)
+    }
+    assert.equal((await call(ctx, `/day?date=${date}`, { token })).status !== 500, true, `/day must not crash on ${date}`)
+  }
+  // Every stored check-in is reachable by the list its own window uses.
+  const { checkins } = await (await call(ctx, '/checkins', { token })).json()
+  for (const checkin of checkins) {
+    assert.equal((await call(ctx, `/checkins/${checkin.id}`, { method: 'DELETE', token })).status, 200,
+      'a stored check-in must always be deletable')
+  }
 })
 
 test('a back-dated check-in does not rewrite what you weigh today', async () => {

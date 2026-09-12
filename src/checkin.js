@@ -79,14 +79,46 @@ const scale = (value) => {
   return Number.isInteger(n) && n >= 1 && n <= 5 ? n : null
 }
 
+/** True when a form field was actually filled in, rather than left blank. */
+const supplied = (raw) => raw !== undefined && raw !== null && String(raw).trim() !== ''
+
+/**
+ * Measurements the user typed that fall outside their field's range.
+ *
+ * Silently dropping these is the worst of the options: a waist typed in inches
+ * (34 against a 40 cm minimum) or a misplaced decimal (850 for 85.0) would be
+ * discarded, the check-in would still report success, and the field would be
+ * cleared — so the number is gone and the body-composition readout keeps
+ * showing nothing. Naming the field and its range instead lets the user fix
+ * it, the same way a mistyped weight already does.
+ */
+export function outOfRangeMeasurements(input) {
+  const src = input && typeof input === 'object' ? input.measurements : null
+  if (!src || typeof src !== 'object') return []
+  const bad = []
+  for (const [id, raw] of Object.entries(src)) {
+    const field = MEASUREMENT_BY_ID.get(id)
+    if (!field || !supplied(raw)) continue
+    if (clamp(raw, field.min, field.max) === null) {
+      bad.push({ id, label: field.label, min: field.min, max: field.max })
+    }
+  }
+  return bad
+}
+
 /**
  * Normalise whatever the form sent into a storable check-in. Everything is
  * optional: a check-in with nothing but "knee still sore" in the notes is a
  * legitimate check-in.
+ *
+ * `input` is whatever came off the wire, so it may be null or not an object at
+ * all — a default parameter only covers `undefined`, and a missing or
+ * malformed request body parses to `null`.
  */
-export function sanitiseCheckin(input = {}) {
+export function sanitiseCheckin(rawInput = {}) {
+  const input = rawInput && typeof rawInput === 'object' ? rawInput : {}
   const measurements = {}
-  for (const [id, raw] of Object.entries(input.measurements || {})) {
+  for (const [id, raw] of Object.entries(input.measurements && typeof input.measurements === 'object' ? input.measurements : {})) {
     const field = MEASUREMENT_BY_ID.get(id)
     if (!field) continue
     const value = clamp(raw, field.min, field.max)

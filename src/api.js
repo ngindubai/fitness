@@ -9,7 +9,7 @@ import { parseMeal, parseWorkout, activityKcal, reweighFoodItem, suggestFoods, s
 import { buildDay, buildWeek, summarisePeriod, targetsFor, climateAdjustedKcal, HEAT_MULTIPLIER, DEFAULT_PROFILE, BASELINE_LEVELS, GOALS, CLIMATES, EAT_BACK, bmiInfo, BMI_BANDS, goalDirectionFrom, bodyComposition } from './engine.js'
 import { reviewDay, reviewWeek } from './coach.js'
 import { auditDay } from './food-audit.js'
-import { sanitiseCheckin, isEmptyCheckin, checkinDelta, MEASUREMENT_FIELDS, SCALES } from './checkin.js'
+import { sanitiseCheckin, isEmptyCheckin, checkinDelta, outOfRangeMeasurements, MEASUREMENT_FIELDS, SCALES } from './checkin.js'
 import { recommendMeals, suggestDay, buildTasteProfile, recentMeals } from './recommend.js'
 import { FOODS, FOODS_BY_ID } from './data/foods.js'
 import { ACTIVITIES, ACTIVITIES_BY_ID } from './data/activities.js'
@@ -69,7 +69,21 @@ const WALK_OPTIONS = [
 ]
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
-const isValidDate = (value) => typeof value === 'string' && ISO_DATE.test(value)
+// The shape check is not enough on its own: "2026-99-99" matches it, and every
+// date helper downstream builds a Date from the string. An Invalid Date then
+// throws on toISOString(), which turns a bad request into a 500 — and in the
+// case of a check-in, into a 500 *after* the entry was already written, leaving
+// a row outside every window that lists or deletes it. Parsing here rejects it
+// once, for every route.
+// Round-tripping is the exact test. Parsing alone is not enough either, because
+// V8 rolls day overflows over rather than rejecting them: "2026-02-31" parses
+// happily as 3 March, so it would be stored under a date the rest of the app
+// then reads as a different day.
+const isValidDate = (value) => {
+  if (typeof value !== 'string' || !ISO_DATE.test(value)) return false
+  const parsed = new Date(`${value}T00:00:00Z`)
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+}
 
 function newId() {
   return crypto.randomUUID()
@@ -207,7 +221,7 @@ export async function handleApi(request, ctx) {
   const userId = auth.sub
 
   const { store } = ctx
-  const profile = await store.getProfile(userId)
+  const profile = withoutRetiredPlan(await store.getProfile(userId))
   const today = todayIn(profile.timezone)
 
   // A finished day's review is cached — but logging retroactively changes the
@@ -255,10 +269,16 @@ export async function handleApi(request, ctx) {
       // Rewriting the goal sentence re-reads which way the calories should
       // go. Merging alone would keep the old direction, because the stored
       // profile always carries one. An explicit direction still wins.
+      //
+      // When the new sentence says nothing about direction, an established
+      // profile keeps the direction it already had — that is the one the user
+      // chose or confirmed. A profile still being onboarded has no such
+      // history: its `goal` is only the default, so falling back to it would
+      // turn "get fitter for football" into an unrequested deficit.
       if (typeof body?.goalText === 'string'
         && body.goalText !== profile.goalText
         && !(body?.goal in GOALS)) {
-        merged.goal = goalDirectionFrom(body.goalText, profile.goal || DEFAULT_PROFILE.goal)
+        merged.goal = goalDirectionFrom(body.goalText, profile.onboarded ? profile.goal : 'maintain')
       }
       const next = sanitiseProfile(merged)
       const saved = await store.setProfile(userId, next)
@@ -722,6 +742,12 @@ export async function handleApi(request, ctx) {
       && checkin.weightKg === null) {
       return error(400, 'That weight does not look right — it should be between 30 and 400 kg.')
     }
+    // Same reasoning for the tape measurements: a waist typed in inches or a
+    // misplaced decimal is a mistake to report, not data to throw away.
+    const [badMeasurement] = outOfRangeMeasurements(body)
+    if (badMeasurement) {
+      return error(400, `${badMeasurement.label} should be between ${badMeasurement.min} and ${badMeasurement.max} cm.`)
+    }
     if (isEmptyCheckin(checkin)) {
       return error(400, 'Nothing to save yet — a number, a word or a note is enough.')
     }
@@ -961,6 +987,24 @@ function inferSlot(timezone = 'UTC') {
   return 'snack'
 }
 
+/**
+ * Drop a plan attachment whose plan no longer exists.
+ *
+ * A retired plan leaves a dangling `planId` in every profile that was
+ * following it. Every consumer already guards with `PLANS[planId]`, so nothing
+ * breaks — but the profile keeps *claiming* a plan, which makes the Plan tab
+ * fetch an overview that is never there and leaves the You tab's picker
+ * pointing at a name the app cannot show. Clearing it on read means a retired
+ * plan is gone the moment the code ships, without waiting for the user to save
+ * their profile. `planStart` and `planEdits` go with it: both are meaningless
+ * without the plan they anchor to, and keeping them would silently re-apply
+ * old edits if a plan of the same id ever came back.
+ */
+function withoutRetiredPlan(profile) {
+  if (!profile.planId || PLANS[profile.planId]) return profile
+  return { ...profile, planId: null, planStart: null, planEdits: {} }
+}
+
 function sanitiseProfile(input) {
   const clamp = (value, min, max, fallback) => {
     const number = Number(value)
@@ -969,10 +1013,15 @@ function sanitiseProfile(input) {
   // The goal is whatever the user wrote. The direction is what the calorie
   // maths needs, so it is read out of those words — and an explicit direction
   // still wins, because the reading is a guess and the user is not.
+  // An unreadable goal falls back to maintenance, never to a deficit. This is
+  // the only fallback a brand-new account ever hits, and onboarding has no
+  // direction control on it, so guessing "lose" here would put someone whose
+  // goal is "run a half marathon" several hundred calories down with nothing
+  // on screen to reveal it, let alone correct it.
   const goalText = String(input.goalText || '').trim().slice(0, 140)
   const goal = input.goal in GOALS
     ? input.goal
-    : goalDirectionFrom(goalText, DEFAULT_PROFILE.goal)
+    : goalDirectionFrom(goalText, 'maintain')
   return {
     ...DEFAULT_PROFILE,
     name: String(input.name || '').slice(0, 60),

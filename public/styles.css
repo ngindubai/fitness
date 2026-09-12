@@ -1130,12 +1130,24 @@ label.btn { display: inline-flex; align-items: center; cursor: pointer; }
 
 /* ---------------------------------------------------------------- check-in */
 
-/* Labels must never wrap: the tab bar is fixed-height and nine tabs are tight. */
+/* Labels must never wrap: the tab bar is fixed-height and nine tabs are tight.
+   Nine tabs at 320px leave each button ~35px, so "Pantry" and "Coach" clipped
+   to "Pa…" and "Co…" at the default size — and two ellipsed labels side by side
+   identify nothing. Below 400px the label gets the space back from the padding
+   and a smaller size; below 340px there is no size that fits, so the icon does
+   the work alone and aria-label carries the name. */
 nav.tabs button span {
   max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+@media (max-width: 400px) {
+  nav.tabs button { padding-left: 1px; padding-right: 1px; font-size: 0.58rem; letter-spacing: 0; }
+}
+@media (max-width: 340px) {
+  nav.tabs button span { display: none; }
+  nav.tabs button { padding-top: 13px; padding-bottom: 15px; }
 }
 
 .checkin-block { margin-bottom: 18px; }

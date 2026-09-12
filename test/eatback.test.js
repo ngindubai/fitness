@@ -8,7 +8,7 @@ import { climateAdjustedKcal } from '../src/engine.js'
 const GARETH = {
   name: 'Gareth', sex: 'male', age: 37, heightCm: 178, weightKg: 115,
   baseline: 'light', goal: 'lose', rateKgPerWeek: 0.5, timezone: 'Asia/Dubai',
-  climate: 'hot', proteinPerKg: null, planId: 'sixmonthsback', planStart: '2026-08-03',
+  climate: 'hot', proteinPerKg: null, planId: 'sixmonthsstronger', planStart: '2026-08-03',
   eatBack: 'all',
 }
 
@@ -17,17 +17,17 @@ const GARETH = {
 test('with a plan, exercise now extends the eating budget (the ring moves)', () => {
   const rest = targetsFor(GARETH, 0)
   const trained = targetsFor(GARETH, 300)
-  assert.equal(rest.calories, 2300)
-  assert.equal(trained.calories, 2600, 'all 300 kcal of training added to the budget')
+  assert.equal(rest.calories, 1800)
+  assert.equal(trained.calories, 2100, 'all 300 kcal of training added to the budget')
   assert.equal(trained.exerciseCredit, 300)
   // Macro prescriptions stay the plan's own.
-  assert.equal(trained.protein, 180)
+  assert.equal(trained.protein, 130)
 })
 
 test('half and none eat-back behave as labelled', () => {
-  assert.equal(targetsFor({ ...GARETH, eatBack: 'half' }, 300).calories, 2450)
+  assert.equal(targetsFor({ ...GARETH, eatBack: 'half' }, 300).calories, 1950)
   const fixed = targetsFor({ ...GARETH, eatBack: 'none' }, 300)
-  assert.equal(fixed.calories, 2300)
+  assert.equal(fixed.calories, 1800)
   assert.equal(fixed.exerciseCredit, 0)
 })
 

@@ -1871,9 +1871,20 @@ async function loadCheckIn() {
 
 $('ci-save').addEventListener('click', async () => {
   const measurements = {}
+  // Range-check here as well as on the server. The save button sits outside a
+  // form, so the inputs' own min/max never run — and a waist typed in inches
+  // is much easier to fix while it is still on screen than after a round trip
+  // has cleared the field.
   for (const field of checkinMeta?.fields || []) {
-    const value = Number($(`ci-m-${field.id}`).value)
-    if (Number.isFinite(value) && value > 0) measurements[field.id] = value
+    const entered = $(`ci-m-${field.id}`).value.trim()
+    if (!entered) continue
+    const value = Number(entered)
+    if (!Number.isFinite(value) || value < field.min || value > field.max) {
+      toast(`${field.label} should be between ${field.min} and ${field.max} cm.`, true)
+      $(`ci-m-${field.id}`).focus()
+      return
+    }
+    measurements[field.id] = value
   }
   const weight = Number($('ci-weight').value)
   const payload = {

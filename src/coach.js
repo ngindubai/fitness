@@ -11,6 +11,8 @@
  * - blunt about the conclusion, truthful about the error bars.
  */
 
+import { isHotClimate } from './engine.js'
+
 const SEVERITY_ORDER = { critical: 0, bad: 1, warn: 2, note: 3, good: 4 }
 
 function finding(severity, code, text) {
@@ -261,7 +263,7 @@ export function reviewDay(day, profile, recentDays = []) {
   }
 
   // ------------------------------------------------------- heat & hydration
-  if (profile.climate === 'hot' && training.outdoorMinutes > 0) {
+  if (isHotClimate(profile) && training.outdoorMinutes > 0) {
     findings.push(
       finding('note', 'heat',
         `${training.outdoorMinutes} min of that was outdoors in serious heat, so the burn ` +
@@ -275,7 +277,7 @@ export function reviewDay(day, profile, recentDays = []) {
       findings.push(
         finding('warn', 'water_low',
           `${(day.waterMl / 1000).toFixed(1)} L of water against a ~${(waterTarget / 1000).toFixed(1)} L day. ` +
-          `At your size${profile.climate === 'hot' ? ' in this climate' : ''}, that is not close. ` +
+          `At your size${isHotClimate(profile) ? ' in this climate' : ''}, that is not close. ` +
           `Dehydration reads as hunger and fatigue - both of which you will then eat.`)
       )
     } else if (day.waterMl >= waterTarget * 0.9) {
@@ -283,7 +285,7 @@ export function reviewDay(day, profile, recentDays = []) {
         finding('good', 'water_ok',
           `${(day.waterMl / 1000).toFixed(1)} L of water - target met. Unglamorous and important.`)
       )
-    } else if (day.waterMl === 0 && training.minutes > 0 && profile.climate === 'hot') {
+    } else if (day.waterMl === 0 && training.minutes > 0 && isHotClimate(profile)) {
       findings.push(
         finding('note', 'water_untracked',
           `You trained in a hot climate and logged no water. If you drank, tap it in - ` +

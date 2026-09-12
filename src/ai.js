@@ -11,6 +11,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk'
+import { isHotClimate } from './engine.js'
 
 const MODEL = 'claude-opus-5'
 
@@ -71,7 +72,7 @@ export async function aiReview({ day, review, profile, ctx }) {
 
   const facts = {
     date: day.date,
-    person: `${profile.age} years old, ${profile.weightKg} kg, ${profile.climate === 'hot' ? 'training in a hot climate' : 'temperate climate'}`,
+    person: `${profile.age} years old, ${profile.weightKg} kg, ${isHotClimate(profile) ? 'training in a hot climate' : 'a temperate climate'}`,
     goal: day.targets.goal,
     waterMl: day.waterMl || 0,
     waterTargetMl: day.targets.waterMl || null,
@@ -157,7 +158,7 @@ export async function aiMealIdeas({ profile, remaining, taste, slot, ctx }) {
         role: 'user',
         content:
           `Suggest 3 ${slot || 'meal'} ideas.\n` +
-          `Goal: ${profile.goal}. Bodyweight: ${profile.weightKg} kg.\n` +
+          `Goal: ${profile.goalText || profile.goal}. Bodyweight: ${profile.weightKg} kg.\n` +
           `Calories left today: ${Math.round(remaining?.kcal ?? 0)}.\n` +
           `Protein still owed: ${Math.round(remaining?.protein ?? 0)} g.\n` +
           `Foods they eat often: ${favourites.length ? favourites.join(', ') : 'not enough history yet'}.`,

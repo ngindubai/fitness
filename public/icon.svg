@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="Fitness">
-  <rect width="192" height="192" rx="44" fill="#0b0d10"/>
-  <circle cx="96" cy="96" r="56" fill="none" stroke="#c6a15b" stroke-width="9" stroke-linecap="round"
+  <rect width="192" height="192" rx="44" fill="#14181b"/>
+  <circle cx="96" cy="96" r="56" fill="none" stroke="#c75030" stroke-width="9" stroke-linecap="round"
           stroke-dasharray="264 88" transform="rotate(-90 96 96)"/>
-  <circle cx="96" cy="96" r="38" fill="none" stroke="#2a3038" stroke-width="8"/>
-  <circle cx="96" cy="96" r="10" fill="#c6a15b"/>
+  <circle cx="96" cy="96" r="38" fill="none" stroke="#3e4a36" stroke-width="8"/>
+  <circle cx="96" cy="96" r="10" fill="#c75030"/>
 </svg>

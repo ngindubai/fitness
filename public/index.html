@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0b0d10" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#f6f4ef" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14181b" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#e9e7db" media="(prefers-color-scheme: light)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Fitness</title>
@@ -63,7 +63,7 @@
     if (message) {
       var box = document.createElement('div')
       box.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:999;' +
-        'background:#2a1414;color:#f0b9b0;border:1px solid #a04030;border-radius:12px;' +
+        'background:#221a16;color:#f0cabd;border:1px solid #c75030;border-radius:12px;' +
         'padding:12px 14px;font:13px/1.45 -apple-system,sans-serif;word-break:break-word'
       box.textContent = 'The app hit an error while loading — try a refresh. Details: ' + message
       document.body.appendChild(box)
@@ -104,6 +104,7 @@
     <symbol id="i-pantry" viewBox="0 0 24 24"><path d="M7 3.5h10M8.5 3.5v3h7v-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><rect x="5.5" y="6.5" width="13" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M5.5 12h13" stroke="currentColor" stroke-width="1.4"/><path d="M9.5 9.2h5M9.5 15.5h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
     <symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 12h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
     <symbol id="i-body" viewBox="0 0 24 24"><circle cx="12" cy="4.5" r="2.4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 7.5v6M12 9l-4.5 2M12 9l4.5 2M12 13.5 9 20M12 13.5 15 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-checkin" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="16" rx="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M7.8 12.4l2.6 2.6 5.8-5.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   </defs>
 </svg>
 
@@ -149,7 +150,9 @@
       <div class="field"><label for="ob-weight">Weight</label>
         <input id="ob-weight" type="number" min="30" max="400" step="0.1" required inputmode="decimal" placeholder="kg"></div>
       <div class="field"><label for="ob-baseline">Daily life, outside training</label><select id="ob-baseline"></select></div>
-      <div class="field"><label for="ob-goal">Goal</label><select id="ob-goal"></select></div>
+      <div class="field"><label for="ob-goal-text">Your goal — in your own words</label>
+        <input id="ob-goal-text" type="text" maxlength="140" autocomplete="off"
+               placeholder="e.g. Lose 10kg while keeping muscle"></div>
       <p class="hint" id="ob-preview"></p>
       <button class="btn primary" style="width:100%" type="submit">Start tracking</button>
     </form>
@@ -176,6 +179,7 @@
       <button data-view="plan"><svg class="ico"><use href="#i-plan"/></svg>Plan</button>
       <button data-view="coach"><svg class="ico"><use href="#i-coach"/></svg>Coach</button>
       <button data-view="body"><svg class="ico"><use href="#i-body"/></svg>Body</button>
+      <button data-view="checkin"><svg class="ico"><use href="#i-checkin"/></svg>Check-In</button>
       <button data-view="stats"><svg class="ico"><use href="#i-stats"/></svg>Stats</button>
       <button data-view="meals"><svg class="ico"><use href="#i-meals"/></svg>Meals</button>
       <button data-view="pantry"><svg class="ico"><use href="#i-pantry"/></svg>Pantry</button>
@@ -252,6 +256,12 @@
           <button class="btn small" data-ml="750">+750 ml</button>
           <button class="btn small ghost" id="water-undo">Undo</button>
         </div>
+      </div>
+
+      <div class="card" id="quick-card">
+        <h2><svg class="ico"><use href="#i-meals"/></svg> What you actually ate</h2>
+        <div id="slot-rows"></div>
+        <div id="recent-meals"></div>
       </div>
 
       <div class="card logger">
@@ -348,6 +358,61 @@
         <p class="hint" id="body-caption"></p>
         <div id="body-map"></div>
         <div id="body-detail"></div>
+      </div>
+    </section>
+
+    <!-- ====================================================== CHECK-IN -->
+    <section id="view-checkin" class="hidden">
+      <div class="card">
+        <h2><svg class="ico"><use href="#i-checkin"/></svg> Your check-in</h2>
+        <p class="hint" id="checkin-lead">Sit down for two minutes. Numbers where you have them, words where you don't.</p>
+
+        <div class="checkin-block">
+          <label class="checkin-q">How are you feeling?</label>
+          <div class="seg sub scale-seg" id="ci-feeling"></div>
+        </div>
+        <div class="checkin-block">
+          <label class="checkin-q">Energy through the week?</label>
+          <div class="seg sub scale-seg" id="ci-energy"></div>
+        </div>
+        <div class="checkin-block">
+          <label class="checkin-q">Sleeping how?</label>
+          <div class="seg sub scale-seg" id="ci-sleep"></div>
+        </div>
+
+        <div class="checkin-block">
+          <label class="checkin-q" for="ci-weight">Weight today</label>
+          <div class="field"><input id="ci-weight" type="number" min="30" max="400" step="0.1"
+            inputmode="decimal" placeholder="kg — leave blank to skip"></div>
+        </div>
+
+        <div class="checkin-block">
+          <label class="checkin-q">Tape measure</label>
+          <p class="hint" id="ci-measure-hint">Waist is the one worth doing. It tells you something
+            BMI can't — and it doesn't care how much muscle you carry.</p>
+          <div class="measure-grid" id="ci-measurements"></div>
+        </div>
+
+        <div class="checkin-block">
+          <label class="checkin-q" for="ci-training">How has training gone?</label>
+          <textarea id="ci-training" rows="2" placeholder="Sessions hit, what felt strong, what hurt"></textarea>
+        </div>
+        <div class="checkin-block">
+          <label class="checkin-q" for="ci-notes">Anything else worth remembering?</label>
+          <textarea id="ci-notes" rows="3" placeholder="Food, stress, travel, injuries, wins"></textarea>
+        </div>
+
+        <button class="btn primary" style="width:100%" id="ci-save" type="button">Save this check-in</button>
+      </div>
+
+      <div class="card hidden" id="ci-since-card">
+        <h2>Since last time</h2>
+        <div id="ci-since"></div>
+      </div>
+
+      <div class="card">
+        <h2>Previous check-ins</h2>
+        <div id="ci-history"><p class="spinner">Loading…</p></div>
       </div>
     </section>
 
@@ -460,14 +525,21 @@
             <div class="field"><label for="p-weight">Weight (kg)</label><input id="p-weight" type="number" min="30" max="400" step="0.1" inputmode="decimal"></div>
           </div>
           <div class="field"><label for="p-baseline">Daily life, outside training</label><select id="p-baseline"></select></div>
+          <div class="field">
+            <label for="p-goal-text">Your goal — in your own words</label>
+            <input id="p-goal-text" type="text" maxlength="140" autocomplete="off"
+                   placeholder="e.g. Lose 10kg while keeping muscle">
+          </div>
           <div class="grid-2">
-            <div class="field"><label for="p-goal">Goal</label><select id="p-goal"></select></div>
+            <div class="field"><label for="p-goal">Counting it as</label><select id="p-goal"></select></div>
             <div class="field"><label for="p-rate">Rate (kg/week)</label><input id="p-rate" type="number" min="0" max="1.5" step="0.05" inputmode="decimal"></div>
           </div>
           <div class="grid-2">
             <div class="field"><label for="p-climate">Climate</label><select id="p-climate"></select></div>
-            <div class="field"><label for="p-timezone">Timezone</label><input id="p-timezone" type="text"></div>
+            <div class="field"><label for="p-region">Country or city</label>
+              <input id="p-region" type="text" maxlength="60" autocomplete="country-name" placeholder="e.g. Dubai, UAE"></div>
           </div>
+          <p class="hint" id="p-tz-note"></p>
           <div class="grid-2">
             <div class="field"><label for="p-plan">Training plan</label><select id="p-plan"><option value="">None</option></select></div>
             <div class="field"><label for="p-plan-start">Plan started (a Monday)</label><input id="p-plan-start" type="date"></div>
@@ -478,7 +550,7 @@
         <p class="hint" id="targets-summary"></p>
       </div>
       <div class="card">
-        <h2>BMI</h2>
+        <h2>Body composition</h2>
         <div id="bmi-card"><p class="spinner">Loading…</p></div>
       </div>
       <div class="card">
@@ -497,6 +569,7 @@
       <button data-view="plan"><svg class="ico"><use href="#i-plan"/></svg><span>Plan</span></button>
       <button data-view="coach"><svg class="ico"><use href="#i-coach"/></svg><span>Coach</span></button>
       <button data-view="body"><svg class="ico"><use href="#i-body"/></svg><span>Body</span></button>
+      <button data-view="checkin"><svg class="ico"><use href="#i-checkin"/></svg><span>Check</span></button>
       <button data-view="stats"><svg class="ico"><use href="#i-stats"/></svg><span>Stats</span></button>
       <button data-view="meals"><svg class="ico"><use href="#i-meals"/></svg><span>Meals</span></button>
       <button data-view="pantry"><svg class="ico"><use href="#i-pantry"/></svg><span>Pantry</span></button>

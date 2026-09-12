@@ -1,88 +1,108 @@
 /* ==========================================================================
-   Fitness — a private club, not a spreadsheet.
-   Dark is the house theme; light is full ivory daylight. Serif display for
-   the numbers that matter, quiet geometry for everything else.
+   Fitness — the coaching identity: charcoal, rust, olive and cream.
+   Dark is the house theme; light is the cream of a printed card. Display type
+   is heavy, condensed and upper-case, the way a training poster shouts.
    ========================================================================== */
 
 :root {
-  --bg: #0b0d10;
-  --bg-grad: radial-gradient(1200px 600px at 85% -10%, rgba(198, 161, 91, 0.07), transparent 60%),
-             radial-gradient(900px 500px at -10% 110%, rgba(79, 169, 143, 0.05), transparent 60%);
-  --surface: #14171d;
-  --surface-2: #1b1f27;
-  --surface-3: #232834;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.14);
-  --text: #eceef1;
-  --muted: #98a1ae;
-  --faint: #6b7482;
-  --accent: #c6a15b;
-  --accent-soft: rgba(198, 161, 91, 0.14);
-  --good: #57b888;
-  --good-soft: rgba(87, 184, 136, 0.14);
-  --warn: #d9a441;
-  --bad: #d96a55;
-  --bad-soft: rgba(217, 106, 85, 0.13);
-  --critical: #c94f3f;
-  --water: #5ba3c6;
-  --water-soft: rgba(91, 163, 198, 0.15);
-  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --bg: #14181b;
+  --bg-grad: radial-gradient(1200px 600px at 85% -10%, rgba(199, 80, 48, 0.10), transparent 60%),
+             radial-gradient(900px 500px at -10% 110%, rgba(62, 74, 54, 0.10), transparent 60%);
+  --surface: #1a1f23;
+  --surface-2: #21272c;
+  --surface-3: #2b3238;
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text: #f1f3f4;
+  --muted: #9ba5ac;
+  --faint: #6e787f;
+  --accent: #c75030;
+  --accent-soft: rgba(199, 80, 48, 0.16);
+  /* The olive band off the card — used for quiet structural emphasis. */
+  --olive: #3e4a36;
+  --olive-soft: rgba(62, 74, 54, 0.34);
+  --cream: #e9e7db;
+  /* Green stays green, but pulled into the brand's olive family so the body
+     map and the "on target" states belong to the same palette as the rust. */
+  --good: #7fa65c;
+  --good-soft: rgba(127, 166, 92, 0.16);
+  --warn: #d98c3a;
+  --bad: #d4472f;
+  --bad-soft: rgba(212, 71, 47, 0.14);
+  --critical: #ae3520;
+  --water: #5e93a8;
+  --water-soft: rgba(94, 147, 168, 0.16);
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
   --radius: 18px;
   --radius-s: 12px;
-  --serif: 'Didot', 'Bodoni MT', 'Playfair Display', Georgia, 'Times New Roman', serif;
+  /* Condensed grotesque for display. No webfont: Roboto Condensed ships on
+     Android, Arial Narrow / Helvetica Neue on desktop, and the weight and
+     tracking carry the look even where neither lands. */
+  --display: 'Roboto Condensed', 'Arial Narrow', 'Helvetica Neue Condensed', 'Oswald',
+             -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --serif: var(--display); /* legacy name, kept so older rules follow along */
   --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 [data-theme='light'] {
-  --bg: #f6f4ef;
-  --bg-grad: radial-gradient(1200px 600px at 85% -10%, rgba(160, 126, 60, 0.06), transparent 60%),
-             radial-gradient(900px 500px at -10% 110%, rgba(31, 138, 93, 0.04), transparent 60%);
-  --surface: #ffffff;
-  --surface-2: #f1eee7;
-  --surface-3: #e9e5db;
-  --border: rgba(28, 26, 21, 0.09);
-  --border-strong: rgba(28, 26, 21, 0.16);
-  --text: #1b1a17;
-  --muted: #6d6a61;
-  --faint: #96938a;
-  --accent: #a07e3c;
-  --accent-soft: rgba(160, 126, 60, 0.12);
-  --good: #1f8a5d;
-  --good-soft: rgba(31, 138, 93, 0.11);
-  --warn: #a9761a;
-  --bad: #c0442e;
-  --bad-soft: rgba(192, 68, 46, 0.1);
-  --critical: #a72f1f;
-  --water: #2e7ea6;
-  --water-soft: rgba(46, 126, 166, 0.12);
-  --shadow: 0 8px 24px rgba(60, 50, 30, 0.08);
+  --bg: #e9e7db;
+  --bg-grad: radial-gradient(1200px 600px at 85% -10%, rgba(199, 80, 48, 0.07), transparent 60%),
+             radial-gradient(900px 500px at -10% 110%, rgba(62, 74, 54, 0.06), transparent 60%);
+  --surface: #f5f3ec;
+  --surface-2: #e1ded1;
+  --surface-3: #d6d2c3;
+  --border: rgba(20, 24, 27, 0.11);
+  --border-strong: rgba(20, 24, 27, 0.19);
+  --text: #14181b;
+  --muted: #5d656a;
+  --faint: #8a9096;
+  --accent: #b8462a;
+  --accent-soft: rgba(184, 70, 42, 0.12);
+  --olive: #3e4a36;
+  --olive-soft: rgba(62, 74, 54, 0.16);
+  --cream: #e9e7db;
+  --good: #4f7a33;
+  --good-soft: rgba(79, 122, 51, 0.13);
+  --warn: #a8701d;
+  --bad: #b53f26;
+  --bad-soft: rgba(181, 63, 38, 0.11);
+  --critical: #93301c;
+  --water: #2f7189;
+  --water-soft: rgba(47, 113, 137, 0.13);
+  --shadow: 0 8px 24px rgba(20, 24, 27, 0.10);
 }
 
 @media (prefers-color-scheme: light) {
+  /* Same palette as [data-theme='light'] above — kept identical by
+     test/branding.test.js, because a drifting copy means a light-OS
+     phone silently runs the previous brand. */
   :root:not([data-theme='dark']) {
-    --bg: #f6f4ef;
-    --bg-grad: radial-gradient(1200px 600px at 85% -10%, rgba(160, 126, 60, 0.06), transparent 60%),
-               radial-gradient(900px 500px at -10% 110%, rgba(31, 138, 93, 0.04), transparent 60%);
-    --surface: #ffffff;
-    --surface-2: #f1eee7;
-    --surface-3: #e9e5db;
-    --border: rgba(28, 26, 21, 0.09);
-    --border-strong: rgba(28, 26, 21, 0.16);
-    --text: #1b1a17;
-    --muted: #6d6a61;
-    --faint: #96938a;
-    --accent: #a07e3c;
-    --accent-soft: rgba(160, 126, 60, 0.12);
-    --good: #1f8a5d;
-    --good-soft: rgba(31, 138, 93, 0.11);
-    --warn: #a9761a;
-    --bad: #c0442e;
-    --bad-soft: rgba(192, 68, 46, 0.1);
-    --critical: #a72f1f;
-    --water: #2e7ea6;
-    --water-soft: rgba(46, 126, 166, 0.12);
-    --shadow: 0 8px 24px rgba(60, 50, 30, 0.08);
+    --bg: #e9e7db;
+    --bg-grad: radial-gradient(1200px 600px at 85% -10%, rgba(199, 80, 48, 0.07), transparent 60%),
+               radial-gradient(900px 500px at -10% 110%, rgba(62, 74, 54, 0.06), transparent 60%);
+    --surface: #f5f3ec;
+    --surface-2: #e1ded1;
+    --surface-3: #d6d2c3;
+    --border: rgba(20, 24, 27, 0.11);
+    --border-strong: rgba(20, 24, 27, 0.19);
+    --text: #14181b;
+    --muted: #5d656a;
+    --faint: #8a9096;
+    --accent: #b8462a;
+    --accent-soft: rgba(184, 70, 42, 0.12);
+    --olive: #3e4a36;
+    --olive-soft: rgba(62, 74, 54, 0.16);
+    --cream: #e9e7db;
+    --good: #4f7a33;
+    --good-soft: rgba(79, 122, 51, 0.13);
+    --warn: #a8701d;
+    --bad: #b53f26;
+    --bad-soft: rgba(181, 63, 38, 0.11);
+    --critical: #93301c;
+    --water: #2f7189;
+    --water-soft: rgba(47, 113, 137, 0.13);
+    --shadow: 0 8px 24px rgba(20, 24, 27, 0.10);
   }
 }
 
@@ -105,7 +125,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; background: none; border: 0; padding: 0; }
 
 .hidden { display: none !important; }
-.serif { font-family: var(--serif); font-weight: 500; letter-spacing: 0.005em; }
+/* Display type: the poster voice — heavy, condensed, upper-case. Kept to
+   headlines and the big numbers; body copy stays quiet sans. */
+.serif {
+  font-family: var(--display);
+  font-weight: 800;
+  letter-spacing: -0.012em;
+  text-transform: uppercase;
+}
 .ico { width: 20px; height: 20px; flex: none; }
 
 /* ------------------------------------------------------------------ shell */
@@ -138,7 +165,7 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 /* ------------------------------------------------------------------ brand */
 
 .brand { display: flex; align-items: center; gap: 12px; padding: 2px 6px; }
-.brand-name { font-family: var(--serif); font-size: 1.25rem; letter-spacing: 0.02em; }
+.brand-name { font-family: var(--display); font-size: 1.3rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.01em; }
 .brand-sub { color: var(--muted); font-size: 0.75rem; }
 
 .brand-mark {
@@ -294,7 +321,7 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 }
 .btn:active { transform: scale(0.97); }
 .btn .ico { width: 16px; height: 16px; }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #14120c; flex: 1; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--cream); flex: 1; }
 .btn.primary:hover { filter: brightness(1.06); }
 .btn.ghost { background: transparent; color: var(--muted); }
 .btn.ghost:hover { color: var(--text); }
@@ -550,7 +577,7 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 
 .sheet {
   position: fixed; inset: 0; z-index: 60;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(20, 24, 27, 0.62);
   backdrop-filter: blur(4px);
   display: grid; align-items: end;
 }
@@ -592,6 +619,10 @@ nav.tabs {
 }
 nav.tabs button {
   flex: 1;
+  /* Nine tabs: without this the flex floor is min-content and the bar either
+     overflows a 320px screen or wraps a label onto a second line, which grows
+     the fixed bar past the padding .main reserves for it. */
+  min-width: 0;
   display: grid; gap: 3px; justify-items: center;
   color: var(--faint);
   padding: 10px 4px 12px;
@@ -606,8 +637,8 @@ nav.tabs button[aria-current='true'] { color: var(--accent); font-weight: 600; }
 
 .login { min-height: 100dvh; display: grid; place-items: center; padding: 24px; background-image: var(--bg-grad); }
 .login-inner { width: min(340px, 100%); text-align: center; }
-.login h1 { font-family: var(--serif); font-size: 2rem; margin: 0 0 4px; font-weight: 500; }
-.serif-sub { color: var(--muted); font-size: 0.88rem; margin: 0 0 26px; font-style: italic; font-family: var(--serif); }
+.login h1 { font-family: var(--display); font-size: 2.4rem; margin: 0 0 4px; font-weight: 800; text-transform: uppercase; letter-spacing: -0.015em; line-height: 1; }
+.serif-sub { color: var(--muted); font-size: 0.88rem; margin: 0 0 26px; font-family: var(--sans); }
 .login input {
   width: 100%;
   background: var(--surface);
@@ -1081,3 +1112,159 @@ label.btn { display: inline-flex; align-items: center; cursor: pointer; }
 .exercise-item:hover { color: var(--accent); }
 .exercise-item .meta { color: var(--faint); font-size: 0.72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
 .picked-name { font-family: var(--serif); font-size: 1.15rem; margin: 8px 0 10px; }
+
+/* ---------------------------------------------------------------- check-in */
+
+/* Labels must never wrap: the tab bar is fixed-height and nine tabs are tight. */
+nav.tabs button span {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.checkin-block { margin-bottom: 18px; }
+.checkin-q {
+  display: block;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin-bottom: 8px;
+}
+.checkin-block textarea {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  padding: 11px 12px;
+  resize: vertical;
+  font-size: 0.92rem;
+}
+.checkin-block textarea:focus { outline: none; border-color: var(--accent); }
+.checkin-block .field { margin-bottom: 0; }
+
+.scale-seg { flex-wrap: wrap; }
+.scale-seg button { flex: 1 1 18%; min-width: 0; font-size: 0.74rem; padding: 8px 4px; }
+
+.measure-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.measure-grid .field { margin-bottom: 0; }
+.measure-grid label { display: block; color: var(--muted); font-size: 0.74rem; margin-bottom: 5px; }
+.measure-grid input {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  padding: 9px 10px;
+  font-size: 0.9rem;
+}
+.measure-grid input:focus { outline: none; border-color: var(--accent); }
+
+.ci-entry {
+  border-bottom: 1px solid var(--border);
+  padding: 12px 0;
+}
+.ci-entry:last-child { border-bottom: none; }
+.ci-entry-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+/* The mood line drops below the date so a long one never shoves Delete off. */
+.ci-entry-head .ci-mood { flex-basis: 100%; order: 3; }
+.ci-date { font-family: var(--display); font-weight: 700; text-transform: uppercase; font-size: 0.95rem; }
+.ci-mood { color: var(--muted); font-size: 0.8rem; }
+.ci-del { margin-left: auto; color: var(--faint); font-size: 0.78rem; }
+.ci-del:hover { color: var(--bad); }
+.ci-figures { color: var(--muted); font-size: 0.82rem; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.ci-text { font-size: 0.88rem; margin-top: 6px; white-space: pre-wrap; }
+.ci-text.quiet { color: var(--muted); }
+
+.ci-delta { display: flex; flex-wrap: wrap; gap: 8px; }
+.ci-delta-item {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 6px 12px;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+.ci-delta-item b { font-family: var(--display); }
+.ci-delta-item.down { border-color: var(--good); color: var(--good); }
+.ci-delta-item.up { border-color: var(--warn); color: var(--warn); }
+
+/* ------------------------------------------------------ body composition */
+
+.comp-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+}
+.comp-row:last-child { border-bottom: none; }
+.comp-value {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 1.3rem;
+  font-variant-numeric: tabular-nums;
+  min-width: 76px;
+  line-height: 1.1;
+}
+.comp-value.good { color: var(--good); }
+.comp-value.warn { color: var(--warn); }
+.comp-value.bad { color: var(--bad); }
+.comp-value.neutral { color: var(--text); }
+.comp-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+.comp-detail { color: var(--muted); font-size: 0.82rem; }
+.comp-caveat {
+  background: var(--surface-2);
+  border-left: 3px solid var(--olive);
+  border-radius: var(--radius-s);
+  padding: 11px 13px;
+  font-size: 0.84rem;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+
+/* ------------------------------------------------------------- quick log */
+
+.slot-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+.slot-row:last-child { border-bottom: none; }
+.slot-name { font-family: var(--display); font-weight: 700; text-transform: uppercase; font-size: 0.88rem; }
+.slot-kcal { color: var(--faint); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.slot-row.filled .slot-kcal { color: var(--muted); }
+.slot-row .slot-add { padding: 5px 13px; font-size: 0.76rem; }
+
+.quick-hint { margin: 12px 0 8px; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-btn {
+  display: grid;
+  gap: 1px;
+  text-align: left;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  padding: 8px 12px;
+  min-height: 42px;
+  max-width: 100%;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+.chip-btn:hover { border-color: var(--accent); background: var(--accent-soft); }
+.chip-btn:disabled { opacity: 0.5; }
+.chip-title {
+  font-size: 0.82rem;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chip-meta { color: var(--faint); font-size: 0.72rem; font-variant-numeric: tabular-nums; }

@@ -12,6 +12,7 @@ import { activityKcal } from './parse.js'
 import { PLANS } from './data/plans.js'
 import { freeSugarTarget } from './sugar.js'
 import { itemMuscleEffort } from './muscles.js'
+import { waistToHeight } from './checkin.js'
 
 /**
  * Baseline activity multipliers applied to BMR. These deliberately describe
@@ -26,10 +27,43 @@ export const BASELINE_LEVELS = {
   active: { label: 'Manual or highly active job', multiplier: 1.6 },
 }
 
+/**
+ * The direction a goal points in. This is not the user's goal — that is their
+ * own sentence, kept in `goalText`. This is the arithmetic consequence of it:
+ * a deficit, a surplus, or neither. Two fields, because a calorie target
+ * cannot be computed from prose and prose cannot be replaced by a dropdown.
+ */
 export const GOALS = {
   lose: { label: 'Lose fat', sign: -1 },
   maintain: { label: 'Maintain', sign: 0 },
   gain: { label: 'Build muscle', sign: 1 },
+}
+
+/**
+ * Read a written goal and decide which way the calories should go.
+ *
+ * Deliberately ordered: "lose 10 kg while maintaining muscle" is a deficit,
+ * even though it says "maintaining", so loss wins over maintenance. Anything
+ * that is about performance rather than size — a 5K time, playing football,
+ * general health — is maintenance, because eating at a deficit is not how
+ * you get faster.
+ *
+ * @param {string} text the user's own words
+ * @param {'lose'|'maintain'|'gain'} fallback used when the text says nothing
+ */
+export function goalDirectionFrom(text, fallback = 'maintain') {
+  const t = String(text || '').toLowerCase()
+  if (!t.trim()) return fallback
+
+  const loses = /\b(lose|losing|lost|drop|shed|cut|cutting|slim|leaner|lean down|lean out|trim|fat loss|weight loss|reduce (?:my )?(?:body ?)?fat|less fat|belly|waist|smaller)\b/
+  const gains = /\b(gain|gaining|bulk|bulking|build (?:some )?muscle|building muscle|put on|add (?:some )?(?:muscle|size|mass)|mass|bigger|grow|hypertrophy|stronger|strength)\b/
+
+  // Loss is checked first on purpose: "lose fat while building muscle" and
+  // "lose 10kg while maintaining muscle" both need a deficit to happen.
+  if (loses.test(t)) return 'lose'
+  if (gains.test(t)) return 'gain'
+  if (/\b(maintain|maintenance|stay|keep|hold|same weight)\b/.test(t)) return 'maintain'
+  return fallback
 }
 
 /**
@@ -47,9 +81,21 @@ export const EAT_BACK = {
 /** Energy content of one kilogram of body-fat tissue, in kcal. */
 const KCAL_PER_KG = 7700
 
+/**
+ * Climate drives two real numbers: the heat adjustment on outdoor training
+ * and the daily fluid target. `heat` is the flag both read, so new climates
+ * can be offered without hunting down every comparison against 'hot'.
+ */
 export const CLIMATES = {
-  hot: { label: 'Hot (Gulf summer, outdoor training in heat)' },
-  temperate: { label: 'Temperate' },
+  hot: { label: 'Hot and humid — Gulf summer, tropics', heat: true },
+  hot_dry: { label: 'Hot and dry — desert, inland summer', heat: true },
+  temperate: { label: 'Temperate — UK, most of Europe', heat: false },
+  cold: { label: 'Cold — northern winter', heat: false },
+}
+
+/** True when this profile's climate makes outdoor work cost more. */
+export function isHotClimate(profile) {
+  return CLIMATES[profile?.climate]?.heat === true
 }
 
 export const DEFAULT_PROFILE = {
@@ -59,10 +105,12 @@ export const DEFAULT_PROFILE = {
   heightCm: 178,
   weightKg: 115,
   baseline: 'light',
-  goal: 'lose',
+  goal: 'lose',       // the arithmetic direction, derived from goalText
+  goalText: '',       // the goal in the user's own words
   rateKgPerWeek: 0.5,
-  timezone: 'Asia/Dubai',
+  timezone: 'Asia/Dubai', // followed from the device; no longer a form field
   climate: 'hot',
+  region: '',         // country or city, for context alongside climate
   proteinPerKg: null, // null = derive from goal
   planId: null,       // structured six-month plan, if following one
   planStart: null,    // ISO date the plan began (ideally a Monday)
@@ -101,6 +149,131 @@ export function bmiInfo(profile) {
 }
 
 /**
+ * The body-composition picture, of which BMI is one line.
+ *
+ * BMI is weight over height squared. It has no way of knowing whether a
+ * kilogram is muscle or fat, which is why NICE NG246 (2025) tells clinicians
+ * to "interpret BMI with caution in adults with high muscle mass" and to
+ * record waist-to-height ratio alongside it. This function is that advice in
+ * code: it gathers every signal the app actually holds — a waist measurement,
+ * the direction of weight over time, whether protein is high enough to defend
+ * lean tissue, and whether resistance training is happening at all — and
+ * returns BMI as the last row rather than the verdict.
+ *
+ * Nothing here estimates body-fat percentage. A phone cannot measure it and
+ * this app will not pretend otherwise; what it can do is show the indicators
+ * that together say more than BMI does alone.
+ */
+export function bodyComposition({ profile, days = [], weighIns = [], latestCheckin = null } = {}) {
+  const bmi = bmiInfo(profile)
+  const waistCm = latestCheckin?.measurements?.waist ?? null
+  const waist = waistToHeight(waistCm, profile.heightCm, bmi.bmi)
+  const indicators = []
+
+  // 1. Central adiposity — the measure that survives a muscular build.
+  if (waist) {
+    indicators.push({
+      id: 'waist',
+      label: 'Waist to height',
+      value: waist.ratio.toFixed(2),
+      detail: waist.lowValue
+        ? `${waist.note} Above BMI 35 this ratio is high for almost everyone, so treat it as a number to move rather than a category.`
+        : `${waist.note} Half your height is ${waist.targetWaistCm} cm.`,
+      tone: waist.band === 'healthy' ? 'good' : waist.band === 'increased' ? 'warn' : 'bad',
+    })
+  } else {
+    indicators.push({
+      id: 'waist',
+      label: 'Waist to height',
+      value: '—',
+      detail: 'Measure your waist on a check-in. It is the one body-composition number '
+        + 'a tape measure can give you, and unlike BMI it still works on a muscular frame.',
+      tone: 'neutral',
+    })
+  }
+
+  // 2. Where the weight is actually going.
+  const points = [...weighIns].sort((a, b) => (a.date < b.date ? -1 : 1))
+  if (points.length >= 2) {
+    const first = points[0]
+    const last = points[points.length - 1]
+    const change = Math.round((last.value - first.value) * 10) / 10
+    const spanDays = Math.max(1, Math.round(
+      (new Date(`${last.date}T00:00:00Z`) - new Date(`${first.date}T00:00:00Z`)) / 86_400_000))
+    const perWeek = Math.round((change / spanDays) * 7 * 100) / 100
+    const wanted = GOALS[profile.goal]?.sign ?? 0
+    const moving = change === 0 ? 0 : change < 0 ? -1 : 1
+    indicators.push({
+      id: 'trend',
+      label: 'Weight trend',
+      value: `${change > 0 ? '+' : ''}${change} kg`,
+      detail: `${perWeek > 0 ? '+' : ''}${perWeek} kg a week across ${spanDays} days, `
+        + `${points.length} weigh-ins. Day-to-day weight swings with water and food volume; `
+        + 'only the slope over weeks means anything.',
+      tone: wanted === 0 ? 'neutral' : moving === wanted ? 'good' : moving === 0 ? 'neutral' : 'warn',
+    })
+  } else {
+    indicators.push({
+      id: 'trend',
+      label: 'Weight trend',
+      value: '—',
+      detail: 'Two weigh-ins or more and the direction shows up here.',
+      tone: 'neutral',
+    })
+  }
+
+  // 3. Protein: the difference between losing fat and losing muscle.
+  const logged = days.filter((d) => d.logged)
+  if (logged.length >= 3) {
+    const hit = logged.filter((d) => (d.adherence?.proteinPct || 0) >= 90).length
+    const pct = Math.round((hit / logged.length) * 100)
+    indicators.push({
+      id: 'protein',
+      label: 'Protein held',
+      value: `${pct}%`,
+      detail: `Target met on ${hit} of ${logged.length} logged days. In a deficit this is what `
+        + 'decides whether the scale weight you lose comes off as fat or as muscle.',
+      tone: pct >= 70 ? 'good' : pct >= 40 ? 'warn' : 'bad',
+    })
+  }
+
+  // 4. Resistance training: the other half of keeping what you have.
+  const strengthDays = days.filter((d) => (d.training?.strengthMinutes || 0) > 0).length
+  if (days.length >= 7) {
+    const perWeek = Math.round((strengthDays / (days.length / 7)) * 10) / 10
+    const volume = Math.round(days.reduce((sum, d) => sum + (d.training?.volumeKg || 0), 0))
+    indicators.push({
+      id: 'lifting',
+      label: 'Lifting',
+      value: `${perWeek}/week`,
+      detail: `${strengthDays} resistance sessions in ${days.length} days`
+        + `${volume ? `, ${volume.toLocaleString()} kg of total volume` : ''}. `
+        + 'Two a week is the floor for holding on to muscle while losing weight.',
+      tone: perWeek >= 2 ? 'good' : perWeek >= 1 ? 'warn' : 'bad',
+    })
+  }
+
+  // 5. BMI, last and clearly labelled for what it is.
+  indicators.push({
+    id: 'bmi',
+    label: 'BMI',
+    value: String(bmi.bmi),
+    detail: `${bmi.label} band. Weight against height and nothing else — it cannot tell muscle `
+      + 'from fat, so on a muscular build it reads high without meaning much. Context, not a verdict.',
+    tone: 'neutral',
+  })
+
+  return {
+    bmi,
+    waist,
+    indicators,
+    caveat: 'BMI does not distinguish muscle from fat. NICE advises interpreting it with caution '
+      + 'in people with high muscle mass, and recording waist-to-height ratio alongside it. '
+      + 'Read these indicators together — no single one of them is your health.',
+  }
+}
+
+/**
  * Heat adjustment for outdoor work in a hot climate.
  *
  * Thermoregulation in serious heat (Dubai summer is 38-45C) raises the energy
@@ -117,7 +290,7 @@ export function climateAdjustedKcal(baseKcal, item, profile) {
   // 6am walk in January is not either. Saying so overrides the guess.
   if (item?.conditions === 'cool') return Math.round(baseKcal)
   if (item?.conditions === 'warm') return Math.round(baseKcal * HEAT_MULTIPLIER)
-  if (profile?.climate === 'hot' && item?.outdoor) {
+  if (isHotClimate(profile) && item?.outdoor) {
     return Math.round(baseKcal * HEAT_MULTIPLIER)
   }
   return Math.round(baseKcal)
@@ -131,7 +304,7 @@ export function climateAdjustedKcal(baseKcal, item, profile) {
  */
 export function waterTargetMl(profile, trainingMinutes = 0) {
   const base = profile.weightKg * 35
-  const climate = profile.climate === 'hot' ? 500 : 0
+  const climate = isHotClimate(profile) ? 500 : 0
   const training = Math.min(1500, Math.round(trainingMinutes / 30) * 250)
   return Math.round((base + climate + training) / 250) * 250
 }

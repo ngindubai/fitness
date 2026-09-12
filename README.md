@@ -12,6 +12,10 @@ of the day it tells you — bluntly — whether the day moved you forward or not
 - **Structured lifting.** "bench 3x8 80kg, lat pulldown 4x12 70kg" parses into
   exercises with sets, reps, load and session tonnage, tracked weekly by
   movement pattern (push / pull / legs / core).
+- **Your goal, in your words.** The goal field is a type box — "lose 10kg
+  while keeping muscle", "get fitter for football" — and the app reads which
+  way the calories should go from what you wrote, showing its reading so you
+  can overrule it.
 - **Knows your environment.** Outdoor training in a hot climate carries a
   modest heat uplift on the burn estimate, and the hydration target scales
   with body weight, climate and training load. Protein targets use adjusted
@@ -27,7 +31,17 @@ of the day it tells you — bluntly — whether the day moved you forward or not
   by how much they cost you. It calls out surpluses, low protein, alcohol, junk
   share, missed training, and days where you clearly stopped logging halfway.
 - **Meal suggestions that learn.** Ranked on what you actually eat, what fits
-  your remaining calories, and what you haven't had recently.
+  your remaining calories, and what you haven't had recently — in the Meals tab.
+- **Quick logging of what you actually ate.** The Today tab shows each meal
+  slot with what is in it so far, and one-tap repeats of meals you have logged
+  before, carrying the exact portions you corrected at the time.
+- **Weekly check-ins.** Weight, tape measurements, how you feel, how training
+  went and free-text notes — with the history and what has moved since last
+  time. It reads like sitting down with a coach, not filling in a form.
+- **Body composition, not just BMI.** BMI is shown as the last of several
+  indicators, with the plain statement that it cannot tell muscle from fat.
+  Waist-to-height ratio leads instead: NICE NG246 recommends it alongside BMI
+  precisely because BMI misreads a muscular build.
 - **Works from your phone.** Add to home screen and it behaves like an app.
 - **Free to run.** No hosting cost on the recommended setup.
 - **Multi-user.** "New here? Create your passcode" on the login screen gives
@@ -206,13 +220,20 @@ average is what should drive decisions.
 
 ```
 src/
-  data/foods.js       188 foods, per-100 g macros + natural portion weights
-  data/activities.js  65 activities with MET values and pace ladders
-  data/meals.js       54 meal templates built from real weighed ingredients
+  data/foods.js       539 foods, per-100 g macros + natural portion weights
+  data/activities.js  69 activities with MET values and pace ladders
+  data/meals.js       52 meal templates built from real weighed ingredients
+  data/exercises.js   110 lifts with muscle tiers and compendium MET classes
+  data/plans.js       the six-month training plans
   parse.js            free-text → weighed food items / structured workouts
-  engine.js           BMR, maintenance, targets, daily and weekly roll-ups
+  engine.js           BMR, maintenance, targets, roll-ups, body composition
   coach.js            the review: scoring and the blunt findings
-  recommend.js        taste profile + meal ranking
+  checkin.js          check-in shaping + waist-to-height (NICE NG246) bands
+  muscles.js          muscle effort, recovery windows, workout recommendations
+  sugar.js            free-sugar classification behind the NHS 30 g guideline
+  food-audit.js       the day's cut/swap/keep analysis, no AI involved
+  plan.js             plan prescriptions and per-user plan edits
+  recommend.js        taste profile, meal ranking, recent-meal repeats
   ai.js               optional Anthropic-written commentary
   api.js              HTTP routes, shared by both runtimes
   auth.js             HMAC-signed session tokens
@@ -224,14 +245,14 @@ public/               the phone UI (no build step)
 
 ## Privacy
 
-Single user, passcode-protected, HMAC-signed session tokens that expire after
-60 days. Your log never leaves your own Cloudflare account unless you set an
+Passcode-protected, with HMAC-signed session tokens that expire after 60 days.
+Each account's food, training, check-ins and profile are separate. Your log never leaves your own Cloudflare account unless you set an
 Anthropic API key, in which case the day's totals are sent to the API to write
 the commentary.
 
 ## Limits worth knowing
 
-- The food database is a curated 188 items, not a barcode scanner. Anything it
+- The food database is a curated 539 items, not a barcode scanner. Anything it
   can't match is flagged in the preview and excluded from the total rather than
   silently guessed — the review tells you when that happened.
 - Restaurant and takeaway figures are averages and are the least reliable

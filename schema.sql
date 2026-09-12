@@ -22,11 +22,11 @@ CREATE TABLE IF NOT EXISTS entries (
   id         TEXT PRIMARY KEY,
   user_id    TEXT NOT NULL DEFAULT 'owner',
   date       TEXT NOT NULL,            -- YYYY-MM-DD in the user's timezone
-  kind       TEXT NOT NULL,            -- meal | workout | weight | water
+  kind       TEXT NOT NULL,            -- meal | workout | weight | water | checkin
   slot       TEXT,                     -- breakfast | lunch | dinner | snack
   raw        TEXT,                     -- what was typed, kept for re-parsing
-  items      TEXT,                     -- JSON array of parsed items
-  value      REAL,                     -- weight (kg) and water (ml) entries
+  items      TEXT,                     -- JSON array of parsed items; a check-in's payload
+  value      REAL,                     -- weight (kg), water (ml), check-in weight (kg)
   created_at TEXT NOT NULL
 );
 

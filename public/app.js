@@ -182,7 +182,7 @@ $('logout').addEventListener('click', async () => {
 
 // -------------------------------------------------------------- navigation
 
-const VIEWS = ['today', 'plan', 'coach', 'body', 'stats', 'meals', 'pantry', 'you']
+const VIEWS = ['today', 'plan', 'coach', 'body', 'checkin', 'stats', 'meals', 'pantry', 'you']
 
 document.querySelectorAll('nav.tabs button, .side-nav button').forEach((button) => {
   button.addEventListener('click', () => showView(button.dataset.view))
@@ -198,9 +198,10 @@ function showView(view) {
   if (view === 'coach') loadReview()
   if (view === 'stats') loadStats()
   if (view === 'body') loadBody()
+  if (view === 'checkin') loadCheckIn()
   if (view === 'meals') loadRecommendations()
   if (view === 'pantry') { loadPantry(); loadIngredients() }
-  if (view === 'you') { renderBmi(); loadBuildStamp() }
+  if (view === 'you') { renderComposition(); loadBuildStamp() }
 }
 
 // ------------------------------------------------------------ date + strips
@@ -215,6 +216,7 @@ function setDate(date) {
   syncCalendars()
   if (state.view === 'coach') loadReview()
   if (state.view === 'stats') loadStats()
+  if (state.view === 'checkin') loadCheckIn()
 }
 
 $('prev-day').addEventListener('click', () => setDate(shiftDate(state.date, -1)))
@@ -480,6 +482,124 @@ $('clear-entry').addEventListener('click', () => {
   clearPreview()
 })
 
+/**
+ * Everything that has to happen after anything is logged: highlight the new
+ * row, rebuild the day, and refresh the calendar marks that would otherwise
+ * still show yesterday's colour. Shared so the quick-log buttons and the
+ * free-text logger cannot drift apart.
+ */
+async function afterLog(savedId) {
+  state.lastLoggedId = savedId
+  if (savedId) state.expanded.add(savedId)
+  await loadDay()
+  delete state.calMarks[state.date]
+  await loadCalMarks(state.date.slice(0, 7))
+  renderWeekStrip()
+  syncCalendars()
+}
+
+// ------------------------------------------------------- quick meal logging
+
+const SLOTS = ['breakfast', 'lunch', 'dinner', 'snack']
+
+/** The meal slot the clock suggests, in the profile's own timezone. */
+function slotNow() {
+  let hour = new Date().getHours()
+  try {
+    hour = Number(new Intl.DateTimeFormat('en-GB', {
+      timeZone: state.profile?.timezone || 'UTC', hour: 'numeric', hour12: false,
+    }).format(new Date()))
+  } catch { /* the browser clock is a fine fallback */ }
+  if (hour < 11) return 'breakfast'
+  if (hour < 15) return 'lunch'
+  if (hour < 22) return 'dinner'
+  return 'snack'
+}
+
+/**
+ * The quick card: what each meal slot holds so far, and one-tap repeats of
+ * the things this person actually eats. The free-text logger below it stays
+ * exactly as it was — this is the shortcut, not a replacement.
+ */
+function renderQuickLog(data) {
+  const bySlot = {}
+  for (const entry of data.entries?.meals || []) {
+    const slot = SLOTS.includes(entry.slot) ? entry.slot : 'snack'
+    bySlot[slot] = (bySlot[slot] || 0) + (entry.items || []).reduce((sum, i) => sum + (i.kcal || 0), 0)
+  }
+
+  $('slot-rows').innerHTML = SLOTS.map((slot) => {
+    const kcal = Math.round(bySlot[slot] || 0)
+    return `
+      <div class="slot-row${kcal ? ' filled' : ''}">
+        <span class="slot-name">${slot[0].toUpperCase()}${slot.slice(1)}</span>
+        <span class="slot-kcal">${kcal ? `${kcal.toLocaleString()} kcal` : 'nothing yet'}</span>
+        <button type="button" class="btn small slot-add" data-slot="${slot}">Add</button>
+      </div>`
+  }).join('')
+
+  $('slot-rows').querySelectorAll('.slot-add').forEach((button) => {
+    button.addEventListener('click', () => {
+      setLoggerSlot(button.dataset.slot)
+      $('entry-text').focus()
+      $('entry-text').scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  })
+
+  const recent = data.recent || []
+  $('recent-meals').innerHTML = recent.length
+    ? `<p class="hint quick-hint">Had it before? One tap logs it again, with the same portions.</p>
+       <div class="chip-row">${recent.map((meal, index) => `
+         <button type="button" class="chip-btn" data-recent="${index}">
+           <span class="chip-title">${escapeHtml(meal.title)}</span>
+           <span class="chip-meta">${meal.kcal} kcal${meal.count > 1 ? ` · ${meal.count}×` : ''}</span>
+         </button>`).join('')}</div>`
+    : '<p class="hint quick-hint">Log a meal below and it will show up here for one-tap repeats.</p>'
+
+  $('recent-meals').querySelectorAll('.chip-btn').forEach((button) => {
+    button.addEventListener('click', () => repeatMeal(recent[Number(button.dataset.recent)], button))
+  })
+}
+
+/** Switch the free-text logger to food + a given slot. */
+function setLoggerSlot(slot) {
+  state.kind = 'meal'
+  state.slot = slot
+  document.querySelectorAll('#kind-seg button').forEach((b) =>
+    b.setAttribute('aria-pressed', String(b.dataset.kind === 'meal')))
+  $('slot-seg').classList.remove('hidden')
+  document.querySelectorAll('#slot-seg button').forEach((b) =>
+    b.setAttribute('aria-pressed', String(b.dataset.slot === slot)))
+}
+
+/**
+ * Repeat a meal exactly. The stored items are sent rather than the original
+ * wording, so any portion corrected by hand at the time stays corrected —
+ * re-parsing the text could quietly match a different food.
+ */
+async function repeatMeal(meal, button) {
+  if (!meal) return
+  button.disabled = true
+  try {
+    const saved = await api('/entries', {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: 'meal',
+        date: state.date,
+        slot: meal.slot || state.slot || slotNow(),
+        text: meal.title,
+        items: meal.items,
+      }),
+    })
+    toast(`${meal.title.split(',')[0]} logged again.`)
+    await afterLog(saved.entry?.id || null)
+  } catch (error) {
+    toast(error.message, true)
+  } finally {
+    button.disabled = false
+  }
+}
+
 $('save-entry').addEventListener('click', async () => {
   const text = $('entry-text').value.trim()
   if (!text) return toast('Nothing to log.', true)
@@ -504,16 +624,10 @@ $('save-entry').addEventListener('click', async () => {
         }),
       })
     }
-    state.lastLoggedId = saved.entry?.id || null
-    if (state.lastLoggedId) state.expanded.add(state.lastLoggedId)
     toast('Logged.')
     $('entry-text').value = ''
     clearPreview()
-    await loadDay()
-    delete state.calMarks[state.date]
-    await loadCalMarks(state.date.slice(0, 7))
-    renderWeekStrip()
-    syncCalendars()
+    await afterLog(saved.entry?.id || null)
   } catch (error) {
     toast(error.message, true)
   } finally {
@@ -565,6 +679,7 @@ async function loadDay() {
   renderBars(day)
   renderWater(day)
   renderEntries(data.entries)
+  renderQuickLog(data)
   state.lastLoggedId = null
   loadPlanDay().catch(() => {})
 }
@@ -1219,7 +1334,7 @@ function coachText(dayData, reviewData) {
   const p = state.profile || {}
   const lines = []
   lines.push(`FITNESS LOG — ${fmtDate(day.date, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}`)
-  lines.push(`Profile: ${p.age}y, ${p.weightKg}kg, goal ${day.targets.goal} @${p.rateKgPerWeek}kg/wk${p.climate === 'hot' ? ', hot climate' : ''}`)
+  lines.push(`Profile: ${p.age}y, ${p.weightKg}kg, goal ${day.targets.goal} @${p.rateKgPerWeek}kg/wk${state.options?.climates?.[p.climate]?.heat ? ', hot climate' : ''}`)
   lines.push(`Energy: in ${Math.round(day.caloriesIn)} / target ${day.targets.calories} · out ${Math.round(day.caloriesOut)} · ${day.deficit >= 0 ? 'deficit' : 'surplus'} ${Math.abs(Math.round(day.net))}`)
   lines.push(`Macros: P ${Math.round(day.nutrition.protein)}/${day.targets.protein}g · C ${Math.round(day.nutrition.carbs)}g · F ${Math.round(day.nutrition.fat)}g · fibre ${Math.round(day.nutrition.fibre)}/${day.targets.fibre}g`)
   lines.push(`Water: ${litres(day.waterMl || 0)} of ${litres(day.targets.waterMl || 0)}`)
@@ -1560,7 +1675,9 @@ async function loadBody() {
         ? `${s.reps ? `${s.reps} reps` : ''}${s.cardioMinutes ? `${s.reps ? ' + ' : ''}${s.cardioMinutes} min cardio` : ''} · ${s.exercises.length} exercise${s.exercises.length === 1 ? '' : 's'}`
         : `${effort} effort units`
       return {
-        fill: 'var(--accent)',
+        // Green is the body's colour here: worked muscle reads as growth, not
+        // as a warning. Depth of green carries how much work it took.
+        fill: 'var(--good)',
         opacity: 0.2 + 0.7 * (effort / max),
         title: `${names[muscle]} — ${detailTip}`,
       }
@@ -1576,7 +1693,7 @@ async function loadBody() {
       return `
         <div class="bar-row muscle-stat" title="${escapeHtml(s.exercises.join(', '))}">
           <span class="label">${escapeHtml(names[muscle])}</span>
-          <span class="bar-track"><span class="bar-fill" style="width:${Math.round((effort / max) * 100)}%"></span></span>
+          <span class="bar-track"><span class="bar-fill good" style="width:${Math.round((effort / max) * 100)}%"></span></span>
           <span class="value">${what} · ${s.exercises.length} ex</span>
         </div>`
     }).join('')
@@ -1607,6 +1724,172 @@ async function loadBody() {
     $('body-caption').textContent = error.message
   }
 }
+
+// -------------------------------------------------------------- check-in
+
+/*
+ * The check-in is the coach's chair, not a form. It asks questions, takes
+ * whatever answers exist, and shows what has moved since last time — which is
+ * the only reason to do it rather than just stand on the scales.
+ */
+
+let checkinMeta = null      // {fields, scales} as the server defines them
+const checkinDraft = { feeling: null, energy: null, sleep: null }
+
+function renderScale(id, key, words) {
+  const box = $(id)
+  box.innerHTML = words.map((word, index) =>
+    `<button type="button" data-score="${index + 1}" aria-pressed="${checkinDraft[key] === index + 1}">${escapeHtml(word)}</button>`).join('')
+  box.onclick = (event) => {
+    const button = event.target.closest('button')
+    if (!button) return
+    const score = Number(button.dataset.score)
+    // Tapping the chosen one again clears it: a blank answer is a real answer.
+    checkinDraft[key] = checkinDraft[key] === score ? null : score
+    box.querySelectorAll('button').forEach((b) =>
+      b.setAttribute('aria-pressed', String(Number(b.dataset.score) === checkinDraft[key])))
+  }
+}
+
+function renderMeasurementInputs(fields) {
+  $('ci-measurements').innerHTML = fields.map((field) => `
+    <div class="field">
+      <label for="ci-m-${field.id}">${escapeHtml(field.label)} <span class="hint">cm</span></label>
+      <input id="ci-m-${field.id}" type="number" min="${field.min}" max="${field.max}" step="0.1"
+        inputmode="decimal" placeholder="${escapeHtml(field.hint)}">
+    </div>`).join('')
+}
+
+function moodWords(checkin) {
+  if (!checkinMeta) return ''
+  const parts = []
+  for (const key of ['feeling', 'energy', 'sleep']) {
+    const score = checkin[key]
+    if (score) parts.push(`${key}: ${checkinMeta.scales[key][score - 1].toLowerCase()}`)
+  }
+  return parts.join(' · ')
+}
+
+function renderCheckinDelta(delta) {
+  const card = $('ci-since-card')
+  if (!delta || (delta.weightKg === undefined && !Object.keys(delta.measurements || {}).length)) {
+    card.classList.add('hidden')
+    return
+  }
+  const chip = (label, value, unit) => {
+    if (typeof value !== 'number') return ''
+    const dir = value === 0 ? '' : value < 0 ? 'down' : 'up'
+    const sign = value > 0 ? '+' : ''
+    return `<span class="ci-delta-item ${dir}">${escapeHtml(label)} <b>${sign}${value}${unit}</b></span>`
+  }
+  const names = Object.fromEntries((checkinMeta?.fields || []).map((f) => [f.id, f.label]))
+  const chips = [
+    chip('Weight', delta.weightKg, ' kg'),
+    ...Object.entries(delta.measurements || {}).map(([id, value]) => chip(names[id] || id, value, ' cm')),
+  ].filter(Boolean).join('')
+  if (!chips) { card.classList.add('hidden'); return }
+  $('ci-since').innerHTML =
+    `<div class="ci-delta">${chips}</div>` +
+    `<p class="hint" style="margin-top:10px">Across ${delta.days} day${delta.days === 1 ? '' : 's'}. ` +
+    `Direction over weeks is the signal; a single reading is mostly water.</p>`
+  card.classList.remove('hidden')
+}
+
+function renderCheckinHistory(checkins) {
+  const box = $('ci-history')
+  if (!checkins.length) {
+    box.innerHTML = '<p class="empty">No check-ins yet. The first one is the baseline everything else is measured against.</p>'
+    return
+  }
+  const names = Object.fromEntries((checkinMeta?.fields || []).map((f) => [f.id, f.label]))
+  box.innerHTML = checkins.map((c) => {
+    const figures = [
+      c.weightKg ? `${c.weightKg} kg` : null,
+      ...Object.entries(c.measurements || {}).map(([id, value]) => `${names[id] || id} ${value} cm`),
+    ].filter(Boolean).join(' · ')
+    const mood = moodWords(c)
+    return `
+      <div class="ci-entry" data-id="${c.id}">
+        <div class="ci-entry-head">
+          <span class="ci-date">${escapeHtml(fmtDate(c.date, { day: 'numeric', month: 'short', year: 'numeric' }))}</span>
+          ${mood ? `<span class="ci-mood">${escapeHtml(mood)}</span>` : ''}
+          <button type="button" class="ci-del" aria-label="Delete this check-in">Delete</button>
+        </div>
+        ${figures ? `<div class="ci-figures">${escapeHtml(figures)}</div>` : ''}
+        ${c.training ? `<div class="ci-text"><b>Training.</b> ${escapeHtml(c.training)}</div>` : ''}
+        ${c.notes ? `<div class="ci-text quiet">${escapeHtml(c.notes)}</div>` : ''}
+      </div>`
+  }).join('')
+
+  box.querySelectorAll('.ci-del').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const id = button.closest('.ci-entry').dataset.id
+      try {
+        await api(`/checkins/${id}`, { method: 'DELETE' })
+        toast('Check-in deleted.')
+        loadCheckIn()
+      } catch (error) { toast(error.message, true) }
+    })
+  })
+}
+
+async function loadCheckIn() {
+  try {
+    const data = await api('/checkins?days=365')
+    checkinMeta = { fields: data.fields, scales: data.scales }
+    renderScale('ci-feeling', 'feeling', data.scales.feeling)
+    renderScale('ci-energy', 'energy', data.scales.energy)
+    renderScale('ci-sleep', 'sleep', data.scales.sleep)
+    if (!$('ci-measurements').children.length) renderMeasurementInputs(data.fields)
+
+    const last = data.checkins[0]
+    $('checkin-lead').textContent = last
+      ? `Last check-in ${labelForDate(last.date).toLowerCase()}. Numbers where you have them, words where you don't.`
+      : 'Sit down for two minutes. Numbers where you have them, words where you don\'t.'
+    renderCheckinDelta(data.delta)
+    renderCheckinHistory(data.checkins)
+  } catch (error) {
+    $('ci-history').innerHTML = `<p class="empty">${escapeHtml(error.message)}</p>`
+  }
+}
+
+$('ci-save').addEventListener('click', async () => {
+  const measurements = {}
+  for (const field of checkinMeta?.fields || []) {
+    const value = Number($(`ci-m-${field.id}`).value)
+    if (Number.isFinite(value) && value > 0) measurements[field.id] = value
+  }
+  const weight = Number($('ci-weight').value)
+  const payload = {
+    date: state.date,
+    weightKg: Number.isFinite(weight) && weight > 0 ? weight : null,
+    measurements,
+    feeling: checkinDraft.feeling,
+    energy: checkinDraft.energy,
+    sleep: checkinDraft.sleep,
+    training: $('ci-training').value,
+    notes: $('ci-notes').value,
+  }
+  $('ci-save').disabled = true
+  try {
+    await api('/checkins', { method: 'POST', body: JSON.stringify(payload) })
+    // Clear the form so the next check-in starts honest rather than
+    // inheriting last week's numbers.
+    $('ci-weight').value = ''
+    $('ci-training').value = ''
+    $('ci-notes').value = ''
+    for (const field of checkinMeta?.fields || []) $(`ci-m-${field.id}`).value = ''
+    checkinDraft.feeling = checkinDraft.energy = checkinDraft.sleep = null
+    toast('Check-in saved.')
+    await loadCheckIn()
+    // A weight here is a weigh-in, so the rest of the app has moved on too.
+    if (payload.weightKg) { await loadProfile(); await loadDay() }
+  } catch (error) {
+    toast(error.message, true)
+  } finally {
+    $('ci-save').disabled = false
+  }
+})
 
 // -------------------------------------------------------- exercise picker
 
@@ -2284,12 +2567,18 @@ async function loadProfile() {
   $('p-height').value = profile.heightCm
   $('p-weight').value = profile.weightKg
   $('p-rate').value = profile.rateKgPerWeek
-  $('p-timezone').value = profile.timezone
+  $('p-goal-text').value = profile.goalText || ''
+  $('p-region').value = profile.region || ''
+  // The timezone is followed from the device rather than typed, so it is
+  // reported rather than edited — one less thing to keep in sync by hand.
+  $('p-tz-note').textContent =
+    `Times follow this device automatically — currently ${profile.timezone}.`
 
   $('p-baseline').innerHTML = Object.entries(options.baselines).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')
   $('p-baseline').value = profile.baseline
   $('p-goal').innerHTML = Object.entries(options.goals).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')
   $('p-goal').value = profile.goal
+  goalDirectionTouched = false
   $('p-climate').innerHTML = Object.entries(options.climates || {}).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')
   $('p-climate').value = profile.climate || 'hot'
   $('p-plan').innerHTML = '<option value="">None</option>' +
@@ -2309,6 +2598,12 @@ function renderTargetSummary(targets) {
     `${targets.protein} g protein, ${targets.fibre} g fibre.` + (targets.capNote ? ` ${targets.capNote}` : '')
 }
 
+// The written goal is the real one; the direction below it only exists so the
+// calorie maths has a sign. Touching it by hand pins it.
+let goalDirectionTouched = false
+const GOAL_LABELS = { lose: 'losing fat', maintain: 'maintaining', gain: 'building muscle' }
+$('p-goal').addEventListener('change', () => { goalDirectionTouched = true })
+
 $('profile-form').addEventListener('submit', async (event) => {
   event.preventDefault()
   try {
@@ -2321,10 +2616,13 @@ $('profile-form').addEventListener('submit', async (event) => {
         heightCm: Number($('p-height').value),
         weightKg: Number($('p-weight').value),
         baseline: $('p-baseline').value,
-        goal: $('p-goal').value,
+        goalText: $('p-goal-text').value,
+        // The direction is only sent when the user set it themselves;
+        // otherwise the server re-reads it from the sentence they wrote.
+        ...(goalDirectionTouched ? { goal: $('p-goal').value } : {}),
         rateKgPerWeek: Number($('p-rate').value),
-        timezone: $('p-timezone').value,
         climate: $('p-climate').value,
+        region: $('p-region').value,
         planId: $('p-plan').value || null,
         planStart: $('p-plan-start').value || null,
         eatBack: $('p-eatback').value,
@@ -2332,9 +2630,13 @@ $('profile-form').addEventListener('submit', async (event) => {
     })
     state.profile = profile
     state.bmi = bmi
+    $('p-goal').value = profile.goal
+    goalDirectionTouched = false
     renderTargetSummary(targets)
-    renderBmi()
-    toast('Saved.')
+    renderComposition()
+    toast(profile.goalText
+      ? `Saved. Counting "${profile.goalText}" as ${GOAL_LABELS[profile.goal] || profile.goal}.`
+      : 'Saved.')
     await loadDay()
   } catch (error) { toast(error.message, true) }
 })
@@ -2347,7 +2649,7 @@ $('profile-form').addEventListener('submit', async (event) => {
  * is now something you can read rather than something you have to trust —
  * and there is a button that guarantees a clean copy.
  */
-const BUILD_FEATURES = ['sugar tracker', 'walking conditions', 'day audit', 'BMI chart']
+const BUILD_FEATURES = ['check-in', 'body composition', 'quick meal log', 'day audit']
 
 async function loadBuildStamp() {
   const el = $('build-stamp')
@@ -2394,22 +2696,20 @@ function showOnboarding() {
   const options = state.options || {}
   $('ob-baseline').innerHTML = Object.entries(options.baselines || {})
     .map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')
-  $('ob-goal').innerHTML = Object.entries(options.goals || {})
-    .map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')
   if (state.justSignedUp) {
     $('ob-sex').value = ''
     $('ob-age').value = ''
     $('ob-height').value = ''
     $('ob-weight').value = ''
     $('ob-baseline').value = 'light'
-    $('ob-goal').value = 'maintain'
+    $('ob-goal-text').value = ''
   } else {
     $('ob-sex').value = profile.sex || ''
     $('ob-age').value = profile.age || ''
     $('ob-height').value = profile.heightCm || ''
     $('ob-weight').value = profile.weightKg || ''
     $('ob-baseline').value = profile.baseline
-    $('ob-goal').value = profile.goal
+    $('ob-goal-text').value = profile.goalText || ''
   }
   onboardPreview()
   $('login').classList.add('hidden')
@@ -2429,7 +2729,8 @@ function onboardPreview() {
   const bmr = Math.round(10 * weight + 6.25 * height - 5 * age + offset)
   const bmi = (weight / ((height / 100) ** 2)).toFixed(1)
   $('ob-preview').textContent =
-    `Resting metabolic rate about ${bmr.toLocaleString()} kcal/day (Mifflin-St Jeor). BMI ${bmi}.`
+    `Resting metabolic rate about ${bmr.toLocaleString()} kcal/day (Mifflin-St Jeor). `
+    + `BMI ${bmi} — context only; it cannot tell muscle from fat.`
 }
 
 ;['ob-sex', 'ob-age', 'ob-height', 'ob-weight'].forEach((id) => {
@@ -2449,7 +2750,10 @@ $('onboard-form').addEventListener('submit', async (event) => {
         heightCm: Number($('ob-height').value),
         weightKg: Number($('ob-weight').value),
         baseline: $('ob-baseline').value,
-        goal: $('ob-goal').value,
+        goalText: $('ob-goal-text').value,
+        // Left blank, nobody has told us which way to aim: maintenance is the
+        // honest default rather than assuming everyone wants to shrink.
+        ...($('ob-goal-text').value.trim() ? {} : { goal: 'maintain' }),
         onboarded: true,
       }),
     })
@@ -2464,25 +2768,48 @@ $('onboard-form').addEventListener('submit', async (event) => {
 // --------------------------------------------------------------------- BMI
 
 const BMI_COLOURS = {
-  underweight: '#38bdf8', healthy: 'var(--good)', overweight: '#f0b429',
-  obese1: '#f97316', obese2: '#ef4444', obese3: '#b91c1c',
+  underweight: 'var(--water)', healthy: 'var(--good)', overweight: 'var(--warn)',
+  obese1: 'var(--accent)', obese2: 'var(--bad)', obese3: 'var(--critical)',
 }
 const BMI_LO = 14, BMI_HI = 44 // display window for the gauge
 
-function renderBmi() {
+/*
+ * The body-composition card. BMI used to be the headline here — a single big
+ * number and a band name, which is exactly the reading NICE warns against for
+ * anyone carrying muscle. Now it is the last row of several, under a plain
+ * statement of what it cannot see.
+ */
+async function renderComposition() {
   const el = $('bmi-card')
-  const info = state.bmi
-  if (!el || !info) return
-  const bandColour = BMI_COLOURS[info.band] || 'var(--accent)'
-  el.innerHTML = `
-    <div class="bmi-figure">${info.bmi}<small style="color:${bandColour}">${info.label}</small></div>
-    ${bmiGauge(info)}
-    <p class="bmi-note">Healthy range for your height (BMI 18.5–25):
-      <strong>${info.healthyKgMin}–${info.healthyKgMax} kg</strong>.</p>
-    <div id="bmi-trend"></div>
-    <p class="bmi-note faint">WHO adult classification. BMI is weight-for-height only —
-      it cannot tell muscle from fat, so read it as a trend, not a verdict.</p>`
-  loadBmiTrend()
+  if (!el || !state.profile) return
+  el.innerHTML = '<p class="spinner">Loading…</p>'
+  try {
+    const { weights, composition } = await api('/history?days=180')
+    el.innerHTML = `
+      <p class="comp-caveat">${escapeHtml(composition.caveat)}</p>
+      ${composition.indicators.map((indicator) => `
+        <div class="comp-row">
+          <span class="comp-value ${indicator.tone}">${escapeHtml(indicator.value)}</span>
+          <span>
+            <span class="comp-label">${escapeHtml(indicator.label)}</span>
+            <span class="comp-detail">${escapeHtml(indicator.detail)}</span>
+          </span>
+        </div>`).join('')}
+      <h2 style="margin-top:18px">Where BMI puts you</h2>
+      ${bmiGauge(composition.bmi)}
+      <p class="bmi-note">BMI 18.5–25 for your height is
+        <strong>${composition.bmi.healthyKgMin}–${composition.bmi.healthyKgMax} kg</strong> —
+        a guide to the scale, not a target for a body that lifts.</p>
+      <div id="bmi-trend"></div>`
+    renderWeightTrend(weights, composition.bmi)
+  } catch (error) {
+    // The card must still say something useful if history is unavailable.
+    const info = state.bmi
+    el.innerHTML = info
+      ? `<p class="comp-caveat">BMI cannot tell muscle from fat — read it as context only.</p>
+         ${bmiGauge(info)}`
+      : `<p class="empty">${escapeHtml(error.message)}</p>`
+  }
 }
 
 function bmiGauge(info) {
@@ -2491,7 +2818,7 @@ function bmiGauge(info) {
     const left = x(Math.max(band.min, BMI_LO))
     const width = Math.max(0, x(Math.min(band.max, BMI_HI)) - left)
     return `<rect x="${left.toFixed(1)}" y="26" width="${width.toFixed(1)}" height="12" rx="2"
-      fill="${BMI_COLOURS[band.id] || 'var(--surface-3)'}" opacity="${band.id === state.bmi.band ? 1 : 0.35}">
+      fill="${BMI_COLOURS[band.id] || 'var(--surface-3)'}" opacity="${band.id === info.band ? 1 : 0.35}">
       <title>${band.label}: ${band.min}–${band.max === 60 ? '+' : band.max}</title></rect>`
   }).join('')
   const ticks = [18.5, 25, 30, 35, 40].map((t) =>
@@ -2506,38 +2833,41 @@ function bmiGauge(info) {
   </svg>`
 }
 
-// BMI over time, derived from weigh-ins at the current height.
-async function loadBmiTrend() {
+/*
+ * Weight over time, in kilograms rather than BMI units. Same weigh-ins, but
+ * expressed in the number actually measured, with the healthy-BMI band drawn
+ * behind it as a reference rather than as a verdict.
+ */
+function renderWeightTrend(weights, bmi) {
   const box = $('bmi-trend')
-  if (!box || !state.profile) return
-  try {
-    const { weights } = await api('/history?days=180')
-    if (!weights || weights.length < 2) {
-      box.innerHTML = '<p class="bmi-note">Log weigh-ins to see your BMI trend here.</p>'
-      return
-    }
-    const heightM = state.profile.heightCm / 100
-    const points = weights.map((w) => ({ date: w.date, bmi: w.value / (heightM * heightM) }))
-    const values = points.map((p) => p.bmi)
-    const min = Math.min(...values) - 0.6
-    const max = Math.max(...values) + 0.6
-    const span = Math.max(1, max - min)
-    const px = (i) => (points.length === 1 ? 150 : (i / (points.length - 1)) * 292 + 4)
-    const py = (v) => 96 - ((v - min) / span) * 82
-    const line = points.map((p, i) => `${px(i).toFixed(1)},${py(p.bmi).toFixed(1)}`).join(' ')
-    const guides = [18.5, 25, 30, 35, 40].filter((g) => g > min - 0.5 && g < max + 0.5).map((g) =>
-      `<line x1="4" y1="${py(g).toFixed(1)}" x2="296" y2="${py(g).toFixed(1)}"
-         stroke="var(--border)" stroke-dasharray="3 4" stroke-width="1"/>
-       <text x="296" y="${(py(g) - 3).toFixed(1)}" font-size="8" fill="var(--faint)" text-anchor="end">${g}</text>`).join('')
-    const last = points[points.length - 1]
-    box.innerHTML = `<h2 style="margin-top:14px">BMI over time</h2>
-      <svg class="chart" viewBox="0 0 300 110" preserveAspectRatio="none" role="img" aria-label="BMI trend">
-        ${guides}
-        <polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="2"
-          stroke-linejoin="round" stroke-linecap="round"/>
-        <text x="296" y="106" font-size="9" fill="var(--muted)" text-anchor="end">${last.bmi.toFixed(1)} now</text>
-      </svg>`
-  } catch { box.innerHTML = '' }
+  if (!box) return
+  if (!weights || weights.length < 2) {
+    box.innerHTML = '<p class="bmi-note">Two weigh-ins and the direction shows up here. '
+      + 'Check-ins are the easiest way to add them.</p>'
+    return
+  }
+  const values = weights.map((w) => w.value)
+  const min = Math.min(...values, bmi.healthyKgMax) - 1.5
+  const max = Math.max(...values, bmi.healthyKgMin) + 1.5
+  const span = Math.max(1, max - min)
+  const px = (i) => (weights.length === 1 ? 150 : (i / (weights.length - 1)) * 292 + 4)
+  const py = (v) => 96 - ((v - min) / span) * 82
+  const line = weights.map((w, i) => `${px(i).toFixed(1)},${py(w.value).toFixed(1)}`).join(' ')
+  const bandTop = py(bmi.healthyKgMax)
+  const bandBottom = py(bmi.healthyKgMin)
+  const healthy = bandBottom > bandTop
+    ? `<rect x="4" y="${bandTop.toFixed(1)}" width="292" height="${(bandBottom - bandTop).toFixed(1)}"
+         fill="var(--good)" opacity="0.12"/>`
+    : ''
+  const last = weights[weights.length - 1]
+  box.innerHTML = `<h2 style="margin-top:16px">Weight over time</h2>
+    <svg class="chart" viewBox="0 0 300 110" preserveAspectRatio="none" role="img" aria-label="Weight trend">
+      ${healthy}
+      <polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="2"
+        stroke-linejoin="round" stroke-linecap="round"/>
+      <text x="296" y="106" font-size="9" fill="var(--muted)" text-anchor="end">${last.value} kg now</text>
+    </svg>
+    <p class="bmi-note faint">Green band is the BMI 18.5–25 weight range for your height.</p>`
 }
 
 // -------------------------------------------------------------------- boot
@@ -2559,10 +2889,14 @@ async function boot() {
       return
     }
 
-    const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone
-    if (browserZone && state.profile.timezone !== browserZone && !localStorage.getItem('ff_tz_set')) {
-      localStorage.setItem('ff_tz_set', '1')
-      await api('/profile', { method: 'PUT', body: JSON.stringify({ ...state.profile, timezone: browserZone }) })
+    // The timezone follows the device, every boot. It used to sync once and
+    // then latch forever, which was survivable while the You tab still had a
+    // timezone field to correct it by hand — it no longer does, so a latched
+    // wrong zone would be unfixable. Only fires when the zone actually differs.
+    let browserZone = null
+    try { browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone } catch { /* ancient browser */ }
+    if (browserZone && state.profile.timezone !== browserZone) {
+      await api('/profile', { method: 'PUT', body: JSON.stringify({ timezone: browserZone }) })
       await loadProfile()
     }
 

@@ -6,10 +6,11 @@
  */
 
 import { parseMeal, parseWorkout, activityKcal, reweighFoodItem, suggestFoods, suggestWorkouts } from './parse.js'
-import { buildDay, buildWeek, summarisePeriod, targetsFor, climateAdjustedKcal, HEAT_MULTIPLIER, DEFAULT_PROFILE, BASELINE_LEVELS, GOALS, CLIMATES, EAT_BACK, bmiInfo, BMI_BANDS } from './engine.js'
+import { buildDay, buildWeek, summarisePeriod, targetsFor, climateAdjustedKcal, HEAT_MULTIPLIER, DEFAULT_PROFILE, BASELINE_LEVELS, GOALS, CLIMATES, EAT_BACK, bmiInfo, BMI_BANDS, goalDirectionFrom, bodyComposition } from './engine.js'
 import { reviewDay, reviewWeek } from './coach.js'
 import { auditDay } from './food-audit.js'
-import { recommendMeals, suggestDay, buildTasteProfile } from './recommend.js'
+import { sanitiseCheckin, isEmptyCheckin, checkinDelta, MEASUREMENT_FIELDS, SCALES } from './checkin.js'
+import { recommendMeals, suggestDay, buildTasteProfile, recentMeals } from './recommend.js'
 import { FOODS, FOODS_BY_ID } from './data/foods.js'
 import { ACTIVITIES, ACTIVITIES_BY_ID } from './data/activities.js'
 import { issueToken, verifyToken, checkPasscode, extractToken, sessionCookie, clearedCookie, hashPasscode, verifyPasscodeHash } from './auth.js'
@@ -250,7 +251,16 @@ export async function handleApi(request, ctx) {
     }
     if (method === 'PUT') {
       const body = await readJson(request)
-      const next = sanitiseProfile({ ...profile, ...body })
+      const merged = { ...profile, ...body }
+      // Rewriting the goal sentence re-reads which way the calories should
+      // go. Merging alone would keep the old direction, because the stored
+      // profile always carries one. An explicit direction still wins.
+      if (typeof body?.goalText === 'string'
+        && body.goalText !== profile.goalText
+        && !(body?.goal in GOALS)) {
+        merged.goal = goalDirectionFrom(body.goalText, profile.goal || DEFAULT_PROFILE.goal)
+      }
+      const next = sanitiseProfile(merged)
       const saved = await store.setProfile(userId, next)
       return json({ profile: saved, targets: targetsFor(saved, 0), bmi: bmiInfo(saved) })
     }
@@ -633,6 +643,9 @@ export async function handleApi(request, ctx) {
       day,
       review,
       entries: { meals, workouts, weights, waters },
+      // What this person actually eats, for one-tap repeats on Today. Built
+      // from the month of entries already loaded above — no extra read.
+      recent: recentMeals(entries.filter((e) => e.kind === 'meal'), { limit: 12, excludeDate: date }),
       remaining: {
         kcal: Math.round(day.targets.calories - day.caloriesIn),
         protein: Math.round(day.targets.protein - day.nutrition.protein),
@@ -679,6 +692,82 @@ export async function handleApi(request, ctx) {
     return json({ start, end, week, days, review: reviewWeek(week, profile, days) })
   }
 
+  // --------------------------------------------------------------- check-ins
+  if (path === '/checkins' && method === 'GET') {
+    const window = Math.min(730, Math.max(1, Number(url.searchParams.get('days')) || 365))
+    const from = addDays(today, -(window - 1))
+    const entries = await store.listEntries(userId, from, today)
+    const checkins = entries
+      .filter((e) => e.kind === 'checkin')
+      .map(shapeCheckin)
+      .sort((a, b) => (a.date === b.date ? (a.createdAt < b.createdAt ? 1 : -1) : (a.date < b.date ? 1 : -1)))
+    return json({
+      checkins,
+      // What moved since last time — the reason to check in rather than weigh.
+      delta: checkinDelta(checkins[0], checkins[1]),
+      fields: MEASUREMENT_FIELDS,
+      scales: SCALES,
+      today,
+    })
+  }
+
+  if (path === '/checkins' && method === 'POST') {
+    const body = await readJson(request)
+    const date = isValidDate(body?.date) ? body.date : today
+    const checkin = sanitiseCheckin(body)
+    if (isEmptyCheckin(checkin)) {
+      return error(400, 'Nothing to save yet — a number, a word or a note is enough.')
+    }
+    const stamp = new Date().toISOString()
+    const entry = {
+      id: newId(), date, kind: 'checkin', slot: null,
+      raw: checkin.notes || null, items: [checkin],
+      value: checkin.weightKg ?? null, createdAt: stamp,
+    }
+    await store.addEntry(userId, entry)
+
+    // A weight given at a check-in is a weigh-in like any other: it belongs in
+    // the same history the charts read, and it updates the profile that every
+    // energy target is computed from.
+    if (checkin.weightKg !== null) {
+      await store.addEntry(userId, {
+        id: newId(), date, kind: 'weight', slot: null, raw: null, items: [],
+        value: checkin.weightKg, createdAt: stamp,
+      })
+      await store.setProfile(userId, { ...profile, weightKg: checkin.weightKg })
+      await invalidateReview(date)
+    }
+    return json({ checkin: shapeCheckin(entry) }, { status: 201 })
+  }
+
+  const checkinMatch = path.match(/^\/checkins\/([\w-]+)$/)
+  if (checkinMatch && method === 'DELETE') {
+    const id = checkinMatch[1]
+    // Look the entry up first. Without this the route is a back door: any
+    // entry id would delete, so the Check-In tab's Delete button could quietly
+    // destroy a meal.
+    const entries = await store.listEntries(userId, addDays(today, -730), today)
+    const entry = entries.find((e) => e.id === id)
+    if (!entry || entry.kind !== 'checkin') return error(404, 'No such check-in.')
+
+    await store.deleteEntry(userId, id)
+
+    // A check-in that carried a weight also wrote a weigh-in. Deleting one and
+    // keeping the other would leave the scales — and every calorie target
+    // derived from profile.weightKg — quoting a reading the user just removed.
+    if (entry.value !== null && entry.value !== undefined) {
+      const twin = entries.find((e) => e.kind === 'weight'
+        && e.date === entry.date && e.value === entry.value && e.createdAt === entry.createdAt)
+      if (twin) await store.deleteEntry(userId, twin.id)
+      const standing = entries
+        .filter((e) => e.kind === 'weight' && e.id !== twin?.id)
+        .sort((a, b) => (`${a.date}${a.createdAt}` < `${b.date}${b.createdAt}` ? 1 : -1))[0]
+      if (standing) await store.setProfile(userId, { ...profile, weightKg: standing.value })
+    }
+    await invalidateReview(entry.date)
+    return json({ ok: true })
+  }
+
   // ----------------------------------------------------------------- history
   if (path === '/history' && method === 'GET') {
     const to = isValidDate(url.searchParams.get('to')) ? url.searchParams.get('to') : today
@@ -689,7 +778,15 @@ export async function handleApi(request, ctx) {
     const weights = entries
       .filter((e) => e.kind === 'weight')
       .map((e) => ({ date: e.date, value: e.value }))
-    return json({ from, to, days: built, weights })
+    const latestCheckin = entries
+      .filter((e) => e.kind === 'checkin')
+      .map(shapeCheckin)
+      .sort((a, b) => (a.date < b.date ? 1 : -1))[0] || null
+    return json({
+      from, to, days: built, weights,
+      // Built from the same read rather than a second round trip.
+      composition: bodyComposition({ profile, days: built, weighIns: weights, latestCheckin }),
+    })
   }
 
   // ------------------------------------------------------------------ review
@@ -804,6 +901,23 @@ async function readJson(request) {
   }
 }
 
+/** Flatten a stored check-in entry into the shape the client works with. */
+function shapeCheckin(entry) {
+  const payload = (entry.items && entry.items[0]) || {}
+  return {
+    id: entry.id,
+    date: entry.date,
+    createdAt: entry.createdAt,
+    weightKg: payload.weightKg ?? null,
+    measurements: payload.measurements || {},
+    feeling: payload.feeling ?? null,
+    energy: payload.energy ?? null,
+    sleep: payload.sleep ?? null,
+    training: payload.training || '',
+    notes: payload.notes || '',
+  }
+}
+
 /** Guess a meal slot from the clock in the user's own timezone. */
 function inferSlot(timezone = 'UTC') {
   let hour
@@ -825,6 +939,13 @@ function sanitiseProfile(input) {
     const number = Number(value)
     return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback
   }
+  // The goal is whatever the user wrote. The direction is what the calorie
+  // maths needs, so it is read out of those words — and an explicit direction
+  // still wins, because the reading is a guess and the user is not.
+  const goalText = String(input.goalText || '').trim().slice(0, 140)
+  const goal = input.goal in GOALS
+    ? input.goal
+    : goalDirectionFrom(goalText, DEFAULT_PROFILE.goal)
   return {
     ...DEFAULT_PROFILE,
     name: String(input.name || '').slice(0, 60),
@@ -833,10 +954,12 @@ function sanitiseProfile(input) {
     heightCm: clamp(input.heightCm, 120, 230, DEFAULT_PROFILE.heightCm),
     weightKg: clamp(input.weightKg, 30, 400, DEFAULT_PROFILE.weightKg),
     baseline: input.baseline in BASELINE_LEVELS ? input.baseline : DEFAULT_PROFILE.baseline,
-    goal: input.goal in GOALS ? input.goal : DEFAULT_PROFILE.goal,
+    goal,
+    goalText,
     rateKgPerWeek: clamp(input.rateKgPerWeek, 0, 1.5, DEFAULT_PROFILE.rateKgPerWeek),
     timezone: String(input.timezone || DEFAULT_PROFILE.timezone).slice(0, 64),
     climate: input.climate in CLIMATES ? input.climate : DEFAULT_PROFILE.climate,
+    region: String(input.region || '').trim().slice(0, 60),
     proteinPerKg: input.proteinPerKg ? clamp(input.proteinPerKg, 1.0, 3.5, null) : null,
     planId: input.planId && PLANS[input.planId] ? input.planId : null,
     planStart: isValidDate(input.planStart) ? input.planStart : null,

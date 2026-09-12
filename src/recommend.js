@@ -98,6 +98,63 @@ export function buildTasteProfile(meals) {
   }
 }
 
+/**
+ * The meals you actually eat, most recent first — the raw material for a
+ * one-tap repeat.
+ *
+ * Suggested meals answer "what could I eat?". This answers "what do I
+ * actually eat?", which on most days is a much shorter list and the reason
+ * logging feels like a chore. Repeats carry the stored items rather than the
+ * typed text, so a portion corrected by hand last Tuesday stays corrected.
+ *
+ * @param {Array} mealEntries stored entries of kind 'meal', any order
+ * @param {{slot?: string|null, limit?: number, excludeDate?: string|null}} [opts]
+ */
+export function recentMeals(mealEntries, { slot = null, limit = 12, excludeDate = null } = {}) {
+  const seen = new Map()
+
+  const ordered = [...mealEntries].sort((a, b) => {
+    const left = `${a.date}T${a.createdAt || ''}`
+    const right = `${b.date}T${b.createdAt || ''}`
+    return left < right ? 1 : left > right ? -1 : 0
+  })
+
+  for (const entry of ordered) {
+    const items = (entry.items || []).filter((item) => item && item.recognised !== false)
+    if (!items.length) continue
+    if (slot && entry.slot && entry.slot !== slot) continue
+    if (excludeDate && entry.date === excludeDate) continue
+
+    // Two meals are "the same" when they are the same foods at the same
+    // weights; the wording used to log them is irrelevant.
+    const signature = items
+      .map((item) => `${item.foodId || item.name}@${Math.round(item.grams || 0)}`)
+      .sort()
+      .join('|')
+    if (!signature) continue
+
+    const existing = seen.get(signature)
+    if (existing) {
+      existing.count += 1
+      continue
+    }
+    seen.set(signature, {
+      signature,
+      slot: entry.slot || null,
+      date: entry.date,
+      count: 1,
+      title: items.map((item) => item.name).join(', ').slice(0, 90),
+      kcal: Math.round(items.reduce((sum, item) => sum + (item.kcal || 0), 0)),
+      protein: Math.round(items.reduce((sum, item) => sum + (item.protein || 0), 0)),
+      // planKey ties an item to a plan block; copying it forward would mark
+      // that block "done" on a day the plan was never followed.
+      items: items.map(({ planKey, ...rest }) => rest),
+    })
+  }
+
+  return [...seen.values()].slice(0, limit)
+}
+
 /** How strongly the user's history endorses this template. */
 function tasteScore(template, taste) {
   if (!taste.totalItems) return 0.5 // neutral prior until we know anything

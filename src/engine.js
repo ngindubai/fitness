@@ -42,11 +42,13 @@ export const GOALS = {
 /**
  * Read a written goal and decide which way the calories should go.
  *
- * Deliberately ordered: "lose 10 kg while maintaining muscle" is a deficit,
- * even though it says "maintaining", so loss wins over maintenance. Anything
- * that is about performance rather than size — a 5K time, playing football,
- * general health — is maintenance, because eating at a deficit is not how
- * you get faster.
+ * The earliest intent in the sentence wins, because that is how people write:
+ * the main goal comes first and the qualification follows it. "Lose 10kg
+ * while maintaining muscle" is a deficit; "maintain my weight but get
+ * stronger" is not a surplus; "build muscle without losing strength" is not a
+ * deficit. Checking the categories in a fixed order — as this did at first —
+ * gets two of those three wrong, because the qualifying clause carries words
+ * from the opposite category.
  *
  * @param {string} text the user's own words
  * @param {'lose'|'maintain'|'gain'} fallback used when the text says nothing
@@ -55,15 +57,19 @@ export function goalDirectionFrom(text, fallback = 'maintain') {
   const t = String(text || '').toLowerCase()
   if (!t.trim()) return fallback
 
-  const loses = /\b(lose|losing|lost|drop|shed|cut|cutting|slim|leaner|lean down|lean out|trim|fat loss|weight loss|reduce (?:my )?(?:body ?)?fat|less fat|belly|waist|smaller)\b/
-  const gains = /\b(gain|gaining|bulk|bulking|build (?:some )?muscle|building muscle|put on|add (?:some )?(?:muscle|size|mass)|mass|bigger|grow|hypertrophy|stronger|strength)\b/
+  const PATTERNS = {
+    lose: /\b(lose|losing|lost|drop|shed|cut|cutting|slim|leaner|lean down|lean out|trim|fat loss|weight loss|reduce (?:my )?(?:body ?)?fat|less fat|belly|waist|smaller)\b/,
+    gain: /\b(gain|gaining|bulk|bulking|build (?:some )?muscle|building muscle|put on|add (?:some )?(?:muscle|size|mass)|mass|bigger|grow|hypertrophy|stronger|strength)\b/,
+    maintain: /\b(maintain|maintenance|stay|keep|hold|same weight)\b/,
+  }
 
-  // Loss is checked first on purpose: "lose fat while building muscle" and
-  // "lose 10kg while maintaining muscle" both need a deficit to happen.
-  if (loses.test(t)) return 'lose'
-  if (gains.test(t)) return 'gain'
-  if (/\b(maintain|maintenance|stay|keep|hold|same weight)\b/.test(t)) return 'maintain'
-  return fallback
+  let best = null
+  for (const [direction, pattern] of Object.entries(PATTERNS)) {
+    const match = t.match(pattern)
+    if (!match) continue
+    if (!best || match.index < best.index) best = { direction, index: match.index }
+  }
+  return best ? best.direction : fallback
 }
 
 /**
@@ -200,16 +206,19 @@ export function bodyComposition({ profile, days = [], weighIns = [], latestCheck
     const change = Math.round((last.value - first.value) * 10) / 10
     const spanDays = Math.max(1, Math.round(
       (new Date(`${last.date}T00:00:00Z`) - new Date(`${first.date}T00:00:00Z`)) / 86_400_000))
-    const perWeek = Math.round((change / spanDays) * 7 * 100) / 100
     const wanted = GOALS[profile.goal]?.sign ?? 0
     const moving = change === 0 ? 0 : change < 0 ? -1 : 1
+    // A weekly rate from three days apart is arithmetic, not a trend. Below a
+    // week, report the change and say why there is no rate yet.
+    const rate = spanDays >= 7
+      ? `${(() => { const p = Math.round((change / spanDays) * 7 * 100) / 100; return p > 0 ? `+${p}` : p })()} kg a week across ${spanDays} days, `
+      : `over ${spanDays} day${spanDays === 1 ? '' : 's'} — too short for a weekly rate, `
     indicators.push({
       id: 'trend',
       label: 'Weight trend',
       value: `${change > 0 ? '+' : ''}${change} kg`,
-      detail: `${perWeek > 0 ? '+' : ''}${perWeek} kg a week across ${spanDays} days, `
-        + `${points.length} weigh-ins. Day-to-day weight swings with water and food volume; `
-        + 'only the slope over weeks means anything.',
+      detail: `${rate}${points.length} weigh-ins. Day-to-day weight swings with water and food `
+        + 'volume; only the slope over weeks means anything.',
       tone: wanted === 0 ? 'neutral' : moving === wanted ? 'good' : moving === 0 ? 'neutral' : 'warn',
     })
   } else {
@@ -222,8 +231,14 @@ export function bodyComposition({ profile, days = [], weighIns = [], latestCheck
     })
   }
 
-  // 3. Protein: the difference between losing fat and losing muscle.
-  const logged = days.filter((d) => d.logged)
+  // Recent behaviour is the question — "am I training enough NOW" — so these
+  // two look at the last four weeks rather than the whole history window.
+  const RECENT_DAYS = 28
+  const recent = days.slice(-RECENT_DAYS)
+
+  // 3. Protein: the difference between losing fat and losing muscle. Only days
+  // with food logged can answer it; a workout-only day is not a protein miss.
+  const logged = recent.filter((d) => d.logged && d.mealCount > 0)
   if (logged.length >= 3) {
     const hit = logged.filter((d) => (d.adherence?.proteinPct || 0) >= 90).length
     const pct = Math.round((hit / logged.length) * 100)
@@ -238,16 +253,16 @@ export function bodyComposition({ profile, days = [], weighIns = [], latestCheck
   }
 
   // 4. Resistance training: the other half of keeping what you have.
-  const strengthDays = days.filter((d) => (d.training?.strengthMinutes || 0) > 0).length
-  if (days.length >= 7) {
-    const perWeek = Math.round((strengthDays / (days.length / 7)) * 10) / 10
-    const volume = Math.round(days.reduce((sum, d) => sum + (d.training?.volumeKg || 0), 0))
+  const strengthDays = recent.filter((d) => (d.training?.strengthMinutes || 0) > 0).length
+  if (recent.length >= 7) {
+    const perWeek = Math.round((strengthDays / (recent.length / 7)) * 10) / 10
+    const volume = Math.round(recent.reduce((sum, d) => sum + (d.training?.volumeKg || 0), 0))
     indicators.push({
       id: 'lifting',
       label: 'Lifting',
       value: `${perWeek}/week`,
-      detail: `${strengthDays} resistance sessions in ${days.length} days`
-        + `${volume ? `, ${volume.toLocaleString()} kg of total volume` : ''}. `
+      detail: `${strengthDays} resistance session${strengthDays === 1 ? '' : 's'} in the last `
+        + `${recent.length} days${volume ? `, ${volume.toLocaleString()} kg of total volume` : ''}. `
         + 'Two a week is the floor for holding on to muscle while losing weight.',
       tone: perWeek >= 2 ? 'good' : perWeek >= 1 ? 'warn' : 'bad',
     })

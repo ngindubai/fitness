@@ -554,19 +554,25 @@ function renderQuickLog(data) {
            <span class="chip-title">${escapeHtml(meal.title)}</span>
            <span class="chip-meta">${meal.kcal} kcal${meal.count > 1 ? ` · ${meal.count}×` : ''}</span>
          </button>`).join('')}</div>`
-    : '<p class="hint quick-hint">Log a meal below and it will show up here for one-tap repeats.</p>'
+    : '<p class="hint quick-hint">Meals you logged on earlier days show up here for one-tap repeats.</p>'
 
   $('recent-meals').querySelectorAll('.chip-btn').forEach((button) => {
     button.addEventListener('click', () => repeatMeal(recent[Number(button.dataset.recent)], button))
   })
 }
 
-/** Switch the free-text logger to food + a given slot. */
+/**
+ * Switch the free-text logger to food + a given slot.
+ *
+ * This clicks the real Food button rather than setting state by hand: that
+ * handler also clears the preview and rewrites the placeholder and hint. Doing
+ * half of it left a parsed workout sitting in the preview under a logger that
+ * now called itself food, and saving it filed the workout as a meal.
+ */
 function setLoggerSlot(slot) {
-  state.kind = 'meal'
+  const foodButton = document.querySelector('#kind-seg button[data-kind="meal"]')
+  if (foodButton && state.kind !== 'meal') foodButton.click()
   state.slot = slot
-  document.querySelectorAll('#kind-seg button').forEach((b) =>
-    b.setAttribute('aria-pressed', String(b.dataset.kind === 'meal')))
   $('slot-seg').classList.remove('hidden')
   document.querySelectorAll('#slot-seg button').forEach((b) =>
     b.setAttribute('aria-pressed', String(b.dataset.slot === slot)))
@@ -586,7 +592,9 @@ async function repeatMeal(meal, button) {
       body: JSON.stringify({
         kind: 'meal',
         date: state.date,
-        slot: meal.slot || state.slot || slotNow(),
+        // The slot just chosen wins over the one this meal happened to
+        // carry last time — Add exists precisely to pick a slot.
+        slot: state.slot || meal.slot || slotNow(),
         text: meal.title,
         items: meal.items,
       }),
@@ -1827,7 +1835,11 @@ function renderCheckinHistory(checkins) {
       try {
         await api(`/checkins/${id}`, { method: 'DELETE' })
         toast('Check-in deleted.')
-        loadCheckIn()
+        await loadCheckIn()
+        // The server may have rolled profile.weightKg back to the previous
+        // weigh-in; every target on screen is derived from it.
+        await loadProfile()
+        await loadDay()
       } catch (error) { toast(error.message, true) }
     })
   })
@@ -1843,8 +1855,11 @@ async function loadCheckIn() {
     if (!$('ci-measurements').children.length) renderMeasurementInputs(data.fields)
 
     const last = data.checkins[0]
+    const when = last && (last.date === state.today || last.date === shiftDate(state.today, -1))
+      ? labelForDate(last.date).toLowerCase()
+      : last && `on ${fmtDate(last.date, { day: 'numeric', month: 'long' })}`
     $('checkin-lead').textContent = last
-      ? `Last check-in ${labelForDate(last.date).toLowerCase()}. Numbers where you have them, words where you don't.`
+      ? `Last check-in ${when}. Numbers where you have them, words where you don't.`
       : 'Sit down for two minutes. Numbers where you have them, words where you don\'t.'
     renderCheckinDelta(data.delta)
     renderCheckinHistory(data.checkins)
@@ -2751,9 +2766,11 @@ $('onboard-form').addEventListener('submit', async (event) => {
         weightKg: Number($('ob-weight').value),
         baseline: $('ob-baseline').value,
         goalText: $('ob-goal-text').value,
-        // Left blank, nobody has told us which way to aim: maintenance is the
-        // honest default rather than assuming everyone wants to shrink.
-        ...($('ob-goal-text').value.trim() ? {} : { goal: 'maintain' }),
+        // A brand-new account with a blank goal box aims at maintenance rather
+        // than assuming everyone wants to shrink. An EXISTING profile keeps
+        // whatever direction it already had — re-running onboarding must not
+        // quietly move someone's calorie target.
+        ...(state.justSignedUp && !$('ob-goal-text').value.trim() ? { goal: 'maintain' } : {}),
         onboarded: true,
       }),
     })

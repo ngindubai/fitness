@@ -715,6 +715,13 @@ export async function handleApi(request, ctx) {
     const body = await readJson(request)
     const date = isValidDate(body?.date) ? body.date : today
     const checkin = sanitiseCheckin(body)
+    // A weight that was typed but did not survive validation is a typo, not an
+    // omission — 1134 for 113.4. Saying nothing would store the check-in
+    // without the number the user thought they had entered.
+    if (body?.weightKg !== undefined && body?.weightKg !== null && body?.weightKg !== ''
+      && checkin.weightKg === null) {
+      return error(400, 'That weight does not look right — it should be between 30 and 400 kg.')
+    }
     if (isEmptyCheckin(checkin)) {
       return error(400, 'Nothing to save yet — a number, a word or a note is enough.')
     }
@@ -730,11 +737,21 @@ export async function handleApi(request, ctx) {
     // the same history the charts read, and it updates the profile that every
     // energy target is computed from.
     if (checkin.weightKg !== null) {
-      await store.addEntry(userId, {
-        id: newId(), date, kind: 'weight', slot: null, raw: null, items: [],
-        value: checkin.weightKg, createdAt: stamp,
-      })
-      await store.setProfile(userId, { ...profile, weightKg: checkin.weightKg })
+      const recent = await store.listEntries(userId, addDays(date, -365), today)
+      const weighIns = recent.filter((e) => e.kind === 'weight')
+      // Don't stack an identical reading on a day that already has one.
+      const duplicate = weighIns.some((e) => e.date === date && e.value === checkin.weightKg)
+      if (!duplicate) {
+        await store.addEntry(userId, {
+          id: newId(), date, kind: 'weight', slot: null, raw: null, items: [],
+          value: checkin.weightKg, createdAt: stamp,
+        })
+      }
+      // Only the newest reading may drive the profile weight that every
+      // calorie and hydration target is computed from. Back-filling a check-in
+      // for last month must not rewrite what you weigh today.
+      const newerExists = weighIns.some((e) => e.date > date)
+      if (!newerExists) await store.setProfile(userId, { ...profile, weightKg: checkin.weightKg })
       await invalidateReview(date)
     }
     return json({ checkin: shapeCheckin(entry) }, { status: 201 })
@@ -778,10 +795,20 @@ export async function handleApi(request, ctx) {
     const weights = entries
       .filter((e) => e.kind === 'weight')
       .map((e) => ({ date: e.date, value: e.value }))
-    const latestCheckin = entries
+    // Measurements are taken irregularly: a check-in that records only weight
+    // and a note must not erase the waist recorded a fortnight ago. Each
+    // measurement carries forward from the most recent check-in that had it.
+    const checkins = entries
       .filter((e) => e.kind === 'checkin')
       .map(shapeCheckin)
-      .sort((a, b) => (a.date < b.date ? 1 : -1))[0] || null
+      .sort((a, b) => (a.date < b.date ? 1 : -1))
+    const latestCheckin = checkins.length
+      ? {
+          ...checkins[0],
+          measurements: checkins.reduceRight(
+            (carried, c) => ({ ...carried, ...(c.measurements || {}) }), {}),
+        }
+      : null
     return json({
       from, to, days: built, weights,
       // Built from the same read rather than a second round trip.

@@ -39,6 +39,15 @@ test('a written goal is read for its direction, loss beating maintenance', () =>
   assert.equal(goalDirectionFrom('Improve general health'), 'maintain')
 })
 
+test('the earliest intent in the sentence wins, not the fixed category order', () => {
+  // The qualifying clause carries words from the opposite category, so a
+  // fixed lose-then-gain-then-maintain order gets these backwards.
+  assert.equal(goalDirectionFrom('maintain my weight but get stronger'), 'maintain')
+  assert.equal(goalDirectionFrom('build muscle without losing strength'), 'gain')
+  assert.equal(goalDirectionFrom('stay the same weight but lose belly fat'), 'maintain')
+  assert.equal(goalDirectionFrom('lose fat while building muscle'), 'lose')
+})
+
 test('an empty goal falls back rather than guessing', () => {
   assert.equal(goalDirectionFrom('', 'lose'), 'lose')
   assert.equal(goalDirectionFrom('   ', 'gain'), 'gain')
@@ -267,6 +276,84 @@ test('deleting a check-in takes its mirrored weigh-in with it', async () => {
   const profile = await (await call(ctx, '/profile', { token })).json()
   assert.equal(profile.profile.weightKg, 118,
     'and the profile falls back to the weigh-in that still stands')
+})
+
+test('a measurement carries forward when a later check-in skips the tape', async () => {
+  const ctx = makeCtx()
+  const { token } = await (await call(ctx, '/login', { method: 'POST', body: { passcode: 'boss-code' } })).json()
+  const today = (await (await call(ctx, '/profile', { token })).json()).today
+  const earlier = new Date(`${today}T00:00:00Z`)
+  earlier.setUTCDate(earlier.getUTCDate() - 14)
+
+  await call(ctx, '/checkins', {
+    method: 'POST', token,
+    body: { date: earlier.toISOString().slice(0, 10), measurements: { waist: 112 }, notes: 'tape day' },
+  })
+  // A later check-in with no tape measure must not erase the waist.
+  await call(ctx, '/checkins', { method: 'POST', token, body: { feeling: 4, notes: 'busy week' } })
+
+  const history = await (await call(ctx, '/history?days=60', { token })).json()
+  assert.ok(history.composition.waist, 'the waist should still be known')
+  assert.equal(history.composition.waist.ratio, Math.round((112 / 178) * 100) / 100)
+})
+
+test('a mistyped weight is refused rather than silently dropped', async () => {
+  const ctx = makeCtx()
+  const { token } = await (await call(ctx, '/login', { method: 'POST', body: { passcode: 'boss-code' } })).json()
+  // 1134 is the classic fat-finger for 113.4.
+  const bad = await call(ctx, '/checkins', { method: 'POST', token, body: { weightKg: 1134, notes: 'weighed in' } })
+  assert.equal(bad.status, 400)
+  const listed = await (await call(ctx, '/checkins', { token })).json()
+  assert.equal(listed.checkins.length, 0, 'nothing stored when the weight was rejected')
+})
+
+test('a back-dated check-in does not rewrite what you weigh today', async () => {
+  const ctx = makeCtx()
+  const { token } = await (await call(ctx, '/login', { method: 'POST', body: { passcode: 'boss-code' } })).json()
+  const today = (await (await call(ctx, '/profile', { token })).json()).today
+  const old = new Date(`${today}T00:00:00Z`)
+  old.setUTCDate(old.getUTCDate() - 30)
+
+  await call(ctx, '/entries', { method: 'POST', token, body: { kind: 'weight', value: 100 } })
+  await call(ctx, '/checkins', {
+    method: 'POST', token,
+    body: { date: old.toISOString().slice(0, 10), weightKg: 130, notes: 'back-filled' },
+  })
+
+  const profile = await (await call(ctx, '/profile', { token })).json()
+  assert.equal(profile.profile.weightKg, 100,
+    'every calorie target derives from this — a month-old reading must not claim it')
+})
+
+test('the weight trend refuses to quote a weekly rate from a couple of days', () => {
+  const near = bodyComposition({
+    profile: PROFILE, days: [],
+    weighIns: [{ date: '2026-09-11', value: 115 }, { date: '2026-09-12', value: 114 }],
+  })
+  const trend = near.indicators.find((i) => i.id === 'trend')
+  assert.match(trend.detail, /too short for a weekly rate/)
+
+  const far = bodyComposition({
+    profile: PROFILE, days: [],
+    weighIns: [{ date: '2026-08-12', value: 118 }, { date: '2026-09-12', value: 114 }],
+  })
+  assert.match(far.indicators.find((i) => i.id === 'trend').detail, /kg a week/)
+})
+
+test('lifting frequency is judged on recent weeks, not the whole history window', () => {
+  // Three sessions a week for a month, inside a 180-day request window.
+  const days = Array.from({ length: 180 }, (_, i) => {
+    const date = new Date('2026-04-01T00:00:00Z')
+    date.setUTCDate(date.getUTCDate() + i)
+    const lifting = i >= 152 && i % 2 === 0
+    return buildDay({
+      profile: PROFILE, date: date.toISOString().slice(0, 10), meals: [],
+      workouts: lifting ? [{ items: [{ name: 'Bench', minutes: 30, met: 5, kcal: 200, tags: ['strength'], exercise: { id: 'bench', name: 'Bench press', sets: 3, reps: 8, weightKg: 80, volume: 1920 } }] }] : [],
+    })
+  })
+  const lifting = bodyComposition({ profile: PROFILE, days, weighIns: [] }).indicators.find((i) => i.id === 'lifting')
+  assert.ok(parseFloat(lifting.value) >= 3, `training every other day should read 3+/week, got ${lifting.value}`)
+  assert.equal(lifting.tone, 'good')
 })
 
 // ------------------------------------------------------- repeating meals

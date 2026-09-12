@@ -1762,9 +1762,10 @@ function renderScale(id, key, words) {
 function renderMeasurementInputs(fields) {
   $('ci-measurements').innerHTML = fields.map((field) => `
     <div class="field">
-      <label for="ci-m-${field.id}">${escapeHtml(field.label)} <span class="hint">cm</span></label>
+      <label for="ci-m-${field.id}">${escapeHtml(field.label)}</label>
+      <span class="measure-hint">${escapeHtml(field.hint)}</span>
       <input id="ci-m-${field.id}" type="number" min="${field.min}" max="${field.max}" step="0.1"
-        inputmode="decimal" placeholder="${escapeHtml(field.hint)}">
+        inputmode="decimal" placeholder="cm">
     </div>`).join('')
 }
 
@@ -2784,9 +2785,15 @@ $('onboard-form').addEventListener('submit', async (event) => {
 
 // --------------------------------------------------------------------- BMI
 
+/*
+ * The gauge needs six bands a reader can tell apart, which the severity tokens
+ * no longer provide: rebranded, --accent, --bad and --critical sit within four
+ * degrees of hue of each other, so obese I/II/III rendered as one rust smear.
+ * This ramp is brand-consistent but separated by lightness as well as hue.
+ */
 const BMI_COLOURS = {
   underweight: 'var(--water)', healthy: 'var(--good)', overweight: 'var(--warn)',
-  obese1: 'var(--accent)', obese2: 'var(--bad)', obese3: 'var(--critical)',
+  obese1: '#d97a45', obese2: '#c75030', obese3: '#8f2a1c',
 }
 const BMI_LO = 14, BMI_HI = 44 // display window for the gauge
 
@@ -2874,7 +2881,8 @@ function renderWeightTrend(weights, bmi) {
   const bandBottom = py(bmi.healthyKgMin)
   const healthy = bandBottom > bandTop
     ? `<rect x="4" y="${bandTop.toFixed(1)}" width="292" height="${(bandBottom - bandTop).toFixed(1)}"
-         fill="var(--good)" opacity="0.12"/>`
+         fill="var(--good)" fill-opacity="0.26" stroke="var(--good)" stroke-opacity="0.6"
+         stroke-width="1"/>`
     : ''
   const last = weights[weights.length - 1]
   box.innerHTML = `<h2 style="margin-top:16px">Weight over time</h2>

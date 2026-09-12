@@ -89,6 +89,41 @@ test('the browser chrome and installed icon carry the brand too', () => {
   assert.ok(icon.includes(BRAND.rust), 'icon.svg mark is not the brand rust')
 })
 
+/** WCAG relative luminance, then the standard contrast ratio. */
+function contrast(hexA, hexB) {
+  const channel = (hex, i) => {
+    const v = parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) / 255
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+  }
+  const lum = (hex) => 0.2126 * channel(hex, 0) + 0.7152 * channel(hex, 1) + 0.0722 * channel(hex, 2)
+  const [a, b] = [lum(hexA), lum(hexB)].sort((x, y) => y - x)
+  return (a + 0.05) / (b + 0.05)
+}
+
+test('text on the accent clears AA in both themes', () => {
+  // The rebrand took this from 7.7:1 to 3.7:1 before it was caught: rust is a
+  // much lighter background than the gold it replaced, so the old dark button
+  // text stopped working. Button text is normal-sized, so AA means 4.5:1.
+  const dark = tokensIn(ruleBody(css, ':root {'))
+  const light = tokensIn(ruleBody(css, "[data-theme='light'] {"))
+  for (const [name, palette] of [['dark', dark], ['light', light]]) {
+    const onAccent = palette['--on-accent']
+    assert.ok(onAccent, `${name} palette has no --on-accent`)
+    const measured = contrast(onAccent, palette['--accent'])
+    assert.ok(measured >= 4.5,
+      `${name}: ${onAccent} on ${palette['--accent']} is ${measured.toFixed(2)}:1, under the 4.5:1 floor`)
+  }
+})
+
+test('the selected tab differs in brightness, not just hue', () => {
+  // Rust and --faint measured within 1% of each other in the dark palette, so
+  // colour alone told a colour-blind reader nothing about which tab was open.
+  const rule = ruleBody(css, "nav.tabs button[aria-current='true'] {")
+  assert.match(rule, /color:\s*var\(--text\)/,
+    'the active tab should brighten rather than only changing hue')
+  assert.match(rule, /var\(--accent\)/, 'and should still carry a brand cue')
+})
+
 test('display type is the condensed stack, and only headlines shout', () => {
   const dark = tokensIn(ruleBody(css, ':root {'))
   assert.match(dark['--display'], /Roboto Condensed/,
